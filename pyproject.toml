@@ -16,6 +16,7 @@ dependencies = [
     "scipy",
     "tqdm",
     "json5",
+    "tifffile",
     "black",
     "flake8",
     "mkdocs",
