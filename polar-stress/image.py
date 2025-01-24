@@ -21,6 +21,7 @@ def reshape(image):
             for m in range(2):
                 for n in range(2):
                     im[i // 2, j // 2, :, 2 * m + n] = image[i + m, j + n]
+    # im = image.reshape(nx // 2, 2, ny // 2, 2, 3).swapaxes(1, 2).reshape(nx // 2, ny // 2, 3, 4)
     return im
 
 
