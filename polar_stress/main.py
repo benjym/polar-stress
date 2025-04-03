@@ -7,6 +7,7 @@ import tifffile
 import image
 import generate
 import plotting
+from scipy.ndimage import gaussian_filter
 
 
 def fake_isotropic():
@@ -36,8 +37,14 @@ def convert_stress_to_image():
     sigma = calculate_stress(s, None, p)
 
     sigma_xx = sigma[:, :, 2]
-    tau_xy = sigma[:, :, 0]
+    sigma_xy = sigma[:, :, 0]
     sigma_yy = sigma[:, :, 1]
+
+    if params["scattering"]:
+        # Add scattering
+        sigma_xx = gaussian_filter(sigma_xx, sigma=params["scattering"])
+        sigma_xy = gaussian_filter(sigma_xy, sigma=params["scattering"])
+        sigma_yy = gaussian_filter(sigma_yy, sigma=params["scattering"])
 
     # Example stress state arrays (2D grid)
     # sigma_xx = np.random.uniform(-10e6, 10e6, (100, 100))  # Pa
@@ -46,7 +53,7 @@ def convert_stress_to_image():
 
     # Compute principal stresses
     sigma_avg = (sigma_xx + sigma_yy) / 2
-    R = np.sqrt(((sigma_xx - sigma_yy) / 2) ** 2 + tau_xy**2)
+    R = np.sqrt(((sigma_xx - sigma_yy) / 2) ** 2 + sigma_xy**2)
     sigma_1 = sigma_avg + R
     sigma_2 = sigma_avg - R
 
@@ -62,7 +69,7 @@ def convert_stress_to_image():
     fringe_intensity = np.sin(delta / 2) ** 2  # Fringe pattern
 
     # Isoclinic angle (principal stress orientation)
-    phi = 0.5 * np.arctan2(2 * tau_xy, sigma_xx - sigma_yy)  # Angle in radians
+    phi = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)  # Angle in radians
 
     # Plot the results
     plotting.plot_fringe_pattern(fringe_intensity, phi, filename="output.png")
