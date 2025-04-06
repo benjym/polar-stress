@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors
 import polar_stress.io
@@ -279,15 +280,16 @@ virino = virino()
 
 
 def plot_DoLP_AoLP(DoLP, AoLP, filename="output.png"):
-    plt.figure(figsize=(12, 6))
-    plt.subplot(1, 2, 1)
-    plt.imshow(DoLP)
-    plt.colorbar()
-    plt.title("DoLP")
-    plt.subplot(1, 2, 2)
-    plt.imshow(AoLP)
-    plt.colorbar()
-    plt.title("AoLP")
+    plt.figure(figsize=(12, 6), layout="constrained")
+    for i, colour in enumerate(["R", "G1", "G2", "B"]):
+        plt.subplot(2, 4, 2 * i + 1)
+        plt.imshow(DoLP[:, :, i], vmin=0, vmax=0.05)
+        plt.colorbar()
+        plt.title(colour + " DoLP")
+        plt.subplot(2, 4, 2 * i + 2)
+        plt.imshow(AoLP[:, :, i], cmap=virino)
+        plt.colorbar()
+        plt.title(colour + " AoLP")
     plt.savefig(filename)
 
 
@@ -306,36 +308,17 @@ def plot_fringe_pattern(intensity, isoclinic, filename="output.png"):
     plt.savefig(filename)
 
 
-def show_all_channels(data, filename=None):
-    plt.figure()
-    plt.subplot(4, 4, 1)
-    plt.title("R")
-    plt.imshow(data[:, :, 0])
-    plt.subplot(4, 4, 2)
-    plt.title("G")
-    plt.imshow(data[:, :, 1])
-    plt.subplot(4, 4, 3)
-    plt.title("B")
-    plt.imshow(data[:, :, 2])
-    plt.subplot(4, 4, 4)
-    plt.title("Colour")
-    plt.imshow(data)
+def show_all_channels(data, metadata, filename=None):
+    if metadata["dtype"] == "uint16":
+        data = data.astype("float32") / 65535.0
 
-    channel_name = ["R", "G", "B"]
-    for i in range(3):
-        I0, I90, I45, I135 = polar_stress.io.split_channels(data[:, :, i])
-        plt.subplot(4, 4, 5 + i * 4)
-        plt.title("I0" + channel_name[i])
-        plt.imshow(I0)
-        plt.subplot(4, 4, 6 + i * 4)
-        plt.title("I90" + channel_name[i])
-        plt.imshow(I90)
-        plt.subplot(4, 4, 7 + i * 4)
-        plt.title("I45" + channel_name[i])
-        plt.imshow(I45)
-        plt.subplot(4, 4, 8 + i * 4)
-        plt.title("I135" + channel_name[i])
-        plt.imshow(I135)
+    plt.figure(figsize=(12, 12), layout="constrained")
+    for i, colour in enumerate(["R", "G1", "G2", "B"]):
+        for j, polarisation in enumerate(["0", "90", "45", "135"]):
+            plt.subplot(4, 4, i * 4 + j + 1)
+            plt.title(f"{colour}_{polarisation}")
+            plt.imshow(data[:, :, i, j])
+            plt.axis("off")
 
     if filename:
         plt.savefig(filename)
