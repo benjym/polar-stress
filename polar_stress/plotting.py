@@ -279,18 +279,22 @@ plt.inferno()
 virino = virino()
 
 
-def plot_DoLP_AoLP(DoLP, AoLP, filename="output.png"):
+def plot_DoLP_AoLP(DoLP, AoLP, filename=None):
     plt.figure(figsize=(12, 6), layout="constrained")
     for i, colour in enumerate(["R", "G1", "G2", "B"]):
-        plt.subplot(2, 4, 2 * i + 1)
-        plt.imshow(DoLP[:, :, i], vmin=0, vmax=0.05)
+        plt.subplot(2, 4, i + 1)
+        plt.imshow(DoLP[:, :, i])  # , vmin=0, vmax=0.05)
         plt.colorbar()
         plt.title(colour + " DoLP")
-        plt.subplot(2, 4, 2 * i + 2)
+        plt.subplot(2, 4, i + 5)
         plt.imshow(AoLP[:, :, i], cmap=virino)
         plt.colorbar()
         plt.title(colour + " AoLP")
-    plt.savefig(filename)
+
+    if filename is None:
+        plt.show()
+    else:
+        plt.savefig(filename)
 
 
 def plot_fringe_pattern(intensity, isoclinic, filename="output.png"):

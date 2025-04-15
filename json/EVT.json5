@@ -1,4 +1,6 @@
 {
-    filename: "images/test.tif",
-    polarisation: [0.5,0.2,0,0]
+    mode : "camera",
+    folderName: "/Volumes/PRJ-DynamiX/Qianyu/2025_04_04/2025_04_04_09_22_47_171/02002060_diskSaving1/",
+    crop : [0, 500, 350, 820], // bottom, top, left, right
+    debug: true
 }

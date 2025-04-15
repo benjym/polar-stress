@@ -1,31 +1,26 @@
+import os
 import numpy as np
 import json
-import polar_stress.plotting
-import polar_stress.image
+from tqdm import tqdm
+from glob import glob
 
 
-def load_raw(foldername):
-    json_file = foldername + "/recordingMetadata.json"
-    frame_folder = foldername + "/0000000/"
-    frame_file = frame_folder + f"frame{str(0).zfill(10)}.raw"
-
-    with open(json_file) as f:
-        metadata = json.load(f)
-
-    with open(frame_file, "rb") as f:
+def read_raw(filename, metadata):
+    with open(filename, "rb") as f:
         # work out if it is 8bit or 16 bit
-        eight_but_file_size = metadata["width"] * metadata["height"] * 1
+        eight_bit_file_size = metadata["width"] * metadata["height"] * 1
         actual_file_size = f.seek(0, 2)
-        if actual_file_size == eight_but_file_size:
+
+        if actual_file_size == eight_bit_file_size:
             metadata["dtype"] = "uint8"
-        elif actual_file_size == eight_but_file_size * 2:
+        elif actual_file_size == eight_bit_file_size * 2:
             metadata["dtype"] = "uint16"
         else:
             raise ValueError(
-                f"File size does not match expected size for 8bit or 16bit data. Got {actual_file_size} bytes, expected {eight_but_file_size} or {eight_but_file_size * 2} bytes."
+                f"File size does not match expected size for 8bit or 16bit data. Got {actual_file_size} bytes, expected {eight_bit_file_size} or {eight_bit_file_size * 2} bytes."
             )
 
-        f.seek(0)
+        # f.seek(0)
 
         data = np.memmap(f, dtype=metadata["dtype"], mode="r", offset=0)
         data = data.reshape(
@@ -34,6 +29,29 @@ def load_raw(foldername):
                 metadata["width"],
             )
         )
+        return data
+
+
+def load_raw(foldername):
+    json_file = foldername + "/recordingMetadata.json"
+    if not os.path.exists(json_file):
+        raise ValueError(f"Metadata file {json_file} does not exist. Please check the folder name.")
+
+    frame_folder = foldername + "/0000000/"
+    all_frames = glob(frame_folder + "frame*.raw")
+    # frame_file = frame_folder + f"frame{str(0).zfill(10)}.raw"
+
+    with open(json_file) as f:
+        metadata = json.load(f)
+
+    if len(all_frames) == 0:
+        raise ValueError(f"No frames found in {frame_folder}.")
+    else:
+        # take median over all frames
+        data = []
+        for frame_file in tqdm(all_frames):
+            data.append(read_raw(frame_file, metadata))
+        data = np.median(np.array(data), axis=0)
 
     data = split_channels(data)
 
@@ -85,20 +103,3 @@ def split_channels(data):
         axis=-1,
     )
     return data
-
-
-if __name__ == "__main__":
-    import sys
-
-    foldername = sys.argv[1]
-    data, metadata = load_raw(foldername)
-    polar_stress.plotting.show_all_channels(data, metadata, filename="output.png")
-
-    # manually crop
-    data = data[:500, 350:820, :, :]
-    # Calculate the Degree of Linear Polarisation (DoLP)
-    DoLP = polar_stress.image.DoLP(data)
-    AoLP = polar_stress.image.AoLP(data)
-
-    # Plot the results
-    polar_stress.plotting.plot_DoLP_AoLP(DoLP, AoLP, filename="DoLP_AoLP.png")

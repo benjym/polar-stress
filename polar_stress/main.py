@@ -3,28 +3,29 @@ import argparse
 import json5
 import numpy as np
 import matplotlib.pyplot as plt
-import tifffile
-import image
-import generate
-import plotting
 from scipy.ndimage import gaussian_filter
+import polar_stress.plotting
+import polar_stress.image
+import polar_stress.io
 
 
-def fake_isotropic():
-    # Load the data
-    data = tifffile.imread(params["filename"])
-    data = image.gray_to_rgb(data)
-    data = generate.add_uniform_polarisation_to_image(data, params["polarisation"])
+def image_to_stress(params):
+    data, metadata = polar_stress.io.load_raw(params["folderName"])
+    if params.get("crop") is not None:
+        data = data[params["crop"][0] : params["crop"][1], params["crop"][2] : params["crop"][3], :, :]
+
+    if params["debug"]:
+        polar_stress.plotting.show_all_channels(data, metadata)
 
     # Calculate the Degree of Linear Polarisation (DoLP)
-    DoLP = image.DoLP(data)
-    AoLP = image.AoLP(data)
+    DoLP = polar_stress.image.DoLP(data)
+    AoLP = polar_stress.image.AoLP(data)
 
     # Plot the results
-    plotting.plot_DoLP_AoLP(DoLP, AoLP, filename="output.png")
+    polar_stress.plotting.plot_DoLP_AoLP(DoLP, AoLP, filename="DoLP_AoLP.png")
 
 
-def convert_stress_to_image():
+def stress_to_image(params):
     from HGD.params import load_file
     from HGD.stress import calculate_stress
     from HGD.operators import get_solid_fraction
@@ -82,7 +83,7 @@ if __name__ == "__main__":
 
     params = json5.load(open(args.json_filename, "r"))
 
-    if params["mode"] == "fake_isotropic":
-        fake_isotropic()
+    if params["mode"] == "camera":
+        image_to_stress(params)
     elif params["mode"] == "HGD":
-        convert_stress_to_image()
+        stress_to_image(params)
