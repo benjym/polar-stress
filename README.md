@@ -8,3 +8,7 @@ To install the package, run the following command in the terminal:
 ```bash
 pip install polar-stress
 ```
+
+# Authors
+- [Benjy Marks](benjy.marks@sydney.edu.au)
+- [Qianyu Fang](qianyu.fang@sydney.edu.au)
