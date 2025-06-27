@@ -275,10 +275,6 @@ def virino():
     return cmap
 
 
-plt.inferno()
-virino = virino()
-
-
 def plot_DoLP_AoLP(DoLP, AoLP, filename=None):
     plt.figure(figsize=(12, 6), layout="constrained")
     for i, colour in enumerate(["R", "G1", "G2", "B"]):

@@ -1,0 +1,6 @@
+{
+    wavelengths : [650, 550, 450], // R, G, B wavelengths (nm)
+    C : 2e-12, // stress-optic coefficient (1/Pa)
+    thickness : 0.01, // thickness of sample in m
+    polarization_efficiency : 0.85,
+}

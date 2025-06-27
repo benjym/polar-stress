@@ -3,6 +3,7 @@ import numpy as np
 import json
 from tqdm import tqdm
 from glob import glob
+import polar_stress.image as image
 
 
 def read_raw(filename, metadata):
@@ -103,3 +104,32 @@ def split_channels(data):
         axis=-1,
     )
     return data
+
+
+if __name__ == "__main__":
+    import sys
+    import matplotlib.pyplot as plt
+
+    # Example usage
+    foldername = sys.argv[1]
+    data, metadata = load_raw(foldername)
+
+    AoLP = 2 * image.AoLP(data) + np.pi  # put in range [0, 2pi]
+    DoLP = image.DoLP(data)
+
+    # plt.imshow(AoLP, cmap="hsv")
+    # plt.colorbar()
+    # plt.title("Angle of Linear Polarisation (AoLP)")
+    # plt.show()
+
+    # import tifffile
+
+    # for i, colour in enumerate(["R", "G1", "G2", "B"]):
+    #     tifffile.imwrite(f"AoLP_{colour}.tiff", AoLP[..., i], metadata={"axes": "YX", "unit": "radians"})
+
+    # write a raw binary file - single precision float
+    for i, colour in enumerate(["R", "G1", "G2", "B"]):
+        plt.imsave(f"DoLP_{colour}.png", DoLP[..., i], cmap="gray", vmin=0, vmax=1)
+        plt.imsave(f"AoLP_{colour}.png", AoLP[..., i], cmap="gray", vmin=0, vmax=2 * np.pi)
+        with open(f"AoLP_{colour}.raw", "wb") as f:
+            f.write(AoLP[..., i].astype(np.float32).tobytes())
