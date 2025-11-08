@@ -1,3 +1,4 @@
+import os
 import argparse
 import json5
 import numpy as np
@@ -55,11 +56,14 @@ def image_to_stress(params, output_filename=None, polariser_angle_deg=0.0):
     wavelengths_nm = np.array(params["wavelengths"])  # Wavelengths in nm
     NU = 1.0  # Solid sample
     WAVELENGTHS = wavelengths_nm * 1e-9  # Convert to meters
-    C_VALUES = [
-        C,
-        C,
-        C,
-    ]  # Stress-optic coefficients in 1/Pa
+    if isinstance(C, list) or isinstance(C, np.ndarray):
+        C_VALUES = C
+    else:
+        C_VALUES = [
+            C,
+            C,
+            C,
+        ]  # Stress-optic coefficients in 1/Pa
 
     polariser_angle_rad = np.deg2rad(polariser_angle_deg)
     # Assume light fully polarised in polariser direction
@@ -193,3 +197,129 @@ def cli_stress_to_image():
 
     params = json5.load(open(args.json_filename, "r"))
     stress_to_image(params)
+
+
+def demosaic_raw_image(input_file, metadata, output_prefix=None, output_format="tiff"):
+    """
+    De-mosaic a raw polarimetric image and save to TIFF stack or individual PNGs.
+
+    This function takes a raw image from a polarimetric camera with a 4x4 superpixel
+    pattern and splits it into separate channels for each color and polarization angle.
+
+    Args:
+        input_file (str): Path to the raw image file.
+        metadata (dict): Dictionary containing image metadata with keys:
+            - width (int): Image width in pixels
+            - height (int): Image height in pixels
+            - dtype (str, optional): Data type ('uint8' or 'uint16')
+        output_prefix (str, optional): Prefix for output files. If None, uses input
+            filename without extension. Defaults to None.
+        output_format (str, optional): Output format, either 'tiff' for a single
+            TIFF stack or 'png' for individual PNG files. Defaults to 'tiff'.
+
+    Returns:
+        numpy.ndarray: De-mosaiced image stack of shape [H, W, 4, 4] where:
+            - H, W are the de-mosaiced dimensions (1/4 of original)
+            - First dimension 4: color channels (R, G1, G2, B)
+            - Second dimension 4: polarization angles (0°, 45°, 90°, 135°)
+
+    Notes:
+        - The raw image uses a 4x4 superpixel pattern with interleaved polarization
+          and color filters
+        - Output TIFF stack has shape [H, W, 4, 4] with all channels
+        - Output PNGs create 4 files (one per polarization angle) with shape [H, W, 4]
+          showing all color channels
+    """
+    # Read raw image
+    data = photoelastimetry.io.read_raw(input_file, metadata)
+
+    # De-mosaic into channels
+    demosaiced = photoelastimetry.io.split_channels(data)
+
+    # Keep only R, G1, B channels by removing G2
+    demosaiced = demosaiced[:, :, [0, 1, 3], :]  # Keep R, G1, B
+
+    # Determine output filename prefix
+    if output_prefix is None:
+        output_prefix = os.path.splitext(input_file)[0]
+
+    # Save based on format
+    if output_format.lower() == "tiff":
+        import tifffile
+
+        output_file = f"{output_prefix}_demosaiced.tiff"
+        # Permute to [4, 3, H, W] so TIFF is interpreted as 4 timepoints of 3-channel images
+        demosaiced_transposed = np.transpose(demosaiced, (3, 2, 0, 1))
+        tifffile.imwrite(
+            output_file, demosaiced_transposed.astype(np.uint16), imagej=True, metadata={"axes": "TCYX"}
+        )
+        print(f"Saved TIFF stack to {output_file} (4 polarization angles × 3 color channels)")
+    elif output_format.lower() == "png":
+        import matplotlib.pyplot as plt
+
+        angle_names = ["0deg", "45deg", "90deg", "135deg"]
+        for i, angle in enumerate(angle_names):
+            output_file = f"{output_prefix}_{angle}.png"
+
+            # Normalize to 0-1 for PNG
+            # HARDCODED: 4096 for 12-bit images
+            img = demosaiced[:, :, :, i] / 4096
+
+            plt.imsave(output_file, img)
+            print(f"Saved {angle} polarization to {output_file}")
+    else:
+        raise ValueError(f"Unsupported output format: {output_format}. Use 'tiff' or 'png'.")
+
+    return demosaiced
+
+
+def cli_demosaic():
+    """Command line interface for de-mosaicing raw polarimetric images."""
+    parser = argparse.ArgumentParser(description="De-mosaic raw polarimetric images into separate channels.")
+    parser.add_argument(
+        "input_file",
+        type=str,
+        help="Path to the raw image file.",
+    )
+    parser.add_argument(
+        "--width",
+        type=int,
+        required=True,
+        help="Image width in pixels.",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        required=True,
+        help="Image height in pixels.",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default=None,
+        choices=["uint8", "uint16"],
+        help="Data type (uint8 or uint16). Auto-detected if not specified.",
+    )
+    parser.add_argument(
+        "--output-prefix",
+        type=str,
+        default=None,
+        help="Prefix for output files (default: input filename without extension).",
+    )
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="tiff",
+        choices=["tiff", "png"],
+        help="Output format: 'tiff' for single stack, 'png' for 4 separate images (default: tiff).",
+    )
+    args = parser.parse_args()
+
+    metadata = {
+        "width": args.width,
+        "height": args.height,
+    }
+    if args.dtype:
+        metadata["dtype"] = args.dtype
+
+    demosaic_raw_image(args.input_file, metadata, args.output_prefix, args.format)

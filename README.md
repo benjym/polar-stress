@@ -23,16 +23,19 @@ image-to-stress <json_filename> [--output OUTPUT] [--polariser-angle ANGLE]
 ```
 
 **Arguments:**
+
 - `json_filename`: Path to the JSON5 parameter file containing configuration (required)
 - `--output`: Path to save the output stress map image (optional)
 - `--polariser-angle`: Polariser angle in degrees relative to the 0 degree camera axis (default: 0.0)
 
 **Example:**
+
 ```bash
 image-to-stress params.json5 --output stress_map.png --polariser-angle 45.0
 ```
 
 The JSON5 parameter file should contain:
+
 - `folderName`: Path to folder containing raw photoelastic images
 - `C`: Stress-optic coefficient in 1/Pa
 - `thickness`: Sample thickness in meters
@@ -49,14 +52,17 @@ stress-to-image <json_filename>
 ```
 
 **Arguments:**
+
 - `json_filename`: Path to the JSON5 parameter file containing configuration (required)
 
 **Example:**
+
 ```bash
 stress-to-image params.json5
 ```
 
 The JSON5 parameter file should contain:
+
 - `p_filename`: Path to the photoelastimetry parameter file
 - `stress_filename`: Path to the stress field data file
 - `t`: Thickness of the photoelastic material
@@ -64,6 +70,38 @@ The JSON5 parameter file should contain:
 - `C`: Stress-optic coefficient of the material
 - `scattering` (optional): Gaussian filter sigma for scattering simulation
 - `output_filename` (optional): Path for the output image (default: "output.png")
+
+### demosaic-raw
+
+De-mosaics a raw polarimetric image from a camera with a 4x4 superpixel pattern into separate color and polarization channels.
+
+```bash
+demosaic-raw <input_file> --width WIDTH --height HEIGHT [--dtype DTYPE] [--output-prefix PREFIX] [--format FORMAT]
+```
+
+**Arguments:**
+
+- `input_file`: Path to the raw image file (required)
+- `--width`: Image width in pixels (required)
+- `--height`: Image height in pixels (required)
+- `--dtype`: Data type, either 'uint8' or 'uint16' (auto-detected if not specified)
+- `--output-prefix`: Prefix for output files (default: input filename without extension)
+- `--format`: Output format, either 'tiff' or 'png' (default: 'tiff')
+
+**Examples:**
+
+```bash
+# Save as a single TIFF stack
+demosaic-raw image.raw --width 2448 --height 2048 --dtype uint16 --format tiff
+
+# Save as four separate PNG files (one per polarization angle)
+demosaic-raw image.raw --width 2448 --height 2048 --format png --output-prefix output
+```
+
+**Output formats:**
+
+- `tiff`: Creates a single TIFF file with shape [H/4, W/4, 4, 4] containing all color channels (R, G1, G2, B) and polarization angles (0°, 45°, 90°, 135°)
+- `png`: Creates 4 PNG files (one per polarization angle), each containing all color channels as a composite image
 
 ## Development
 

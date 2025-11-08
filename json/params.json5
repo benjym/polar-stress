@@ -1,6 +1,9 @@
 {
+    polarizer_angle : 0, // in degrees
     wavelengths : [650, 550, 450], // R, G, B wavelengths (nm)
-    C : 2e-12, // stress-optic coefficient (1/Pa)
+    C : [2e-12,2e-12,2e-12], // stress-optic coefficient for each wavelength (1/Pa)
     thickness : 0.01, // thickness of sample in m
-    polarization_efficiency : 0.85,
+    polarization_efficiency : 0.95,
+    folderName : "images/02002060_diskSaving1",
+    debug: false
 }
