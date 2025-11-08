@@ -1,0 +1,413 @@
+"""
+Local stress measurement using polarimetric imaging.
+
+This module implements the local stress measurement algorithm using Mueller
+matrix calculus and multi-wavelength polarimetry to recover the full 2D stress
+tensor at each pixel from polarimetric images.
+"""
+
+import numpy as np
+from scipy.optimize import minimize
+
+
+def compute_stokes_components(I_0, I_45, I_90, I_135):
+    """
+    Compute the Stokes vector components (S0, S1, S2) from intensity measurements.
+
+    Parameters
+    ----------
+    I_0 : array-like
+        Intensity at polarizer angle 0 degrees.
+    I_45 : array-like
+        Intensity at polarizer angle 45 degrees.
+    I_90 : array-like
+        Intensity at polarizer angle 90 degrees.
+    I_135 : array-like
+        Intensity at polarizer angle 135 degrees.
+
+    Returns
+    -------
+    S0 : array-like
+        Total intensity (sum of orthogonal components).
+    S1 : array-like
+        Linear polarization along 0-90 degrees.
+    S2 : array-like
+        Linear polarization along 45-135 degrees.
+    """
+    S0 = I_0 + I_90
+    S1 = I_0 - I_90
+    S2 = I_45 - I_135
+    return S0, S1, S2
+
+
+def compute_normalized_stokes(S0, S1, S2):
+    """
+    Compute normalized Stokes vector components.
+
+    Parameters
+    ----------
+    S0 : array-like
+        Total intensity Stokes parameter.
+    S1 : array-like
+        First linear polarization Stokes parameter.
+    S2 : array-like
+        Second linear polarization Stokes parameter.
+
+    Returns
+    -------
+    S1_hat : array-like
+        Normalized S1 component (S1/S0).
+    S2_hat : array-like
+        Normalized S2 component (S2/S0).
+    """
+    S0_safe = np.where(S0 == 0, 1e-10, S0)
+    S1_hat = S1 / S0_safe
+    S2_hat = S2 / S0_safe
+    return S1_hat, S2_hat
+
+
+def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength):
+    """
+    Compute retardance for a given stress tensor and material properties.
+
+    Parameters
+    ----------
+    sigma_xx : float or array-like
+        Normal stress component in x direction (Pa).
+    sigma_yy : float or array-like
+        Normal stress component in y direction (Pa).
+    sigma_xy : float or array-like
+        Shear stress component (Pa).
+    C : float
+        Stress-optic coefficient for the color channel (1/Pa).
+    n : float
+        Refractive index or effective path factor (dimensionless).
+        For solid samples, use n=1.0. For porous samples, this represents
+        the effective optical path length factor relative to sample thickness.
+    L : float
+        Sample thickness (m).
+    wavelength : float
+        Wavelength of light (m).
+
+    Returns
+    -------
+    delta : float or array-like
+        Retardance (radians).
+
+    Notes
+    -----
+    The retardance formula is: δ = (2πCnL/λ) * √[(σ_xx - σ_yy)² + 4σ_xy²]
+    where the principal stress difference determines the birefringence magnitude.
+    """
+    principal_stress_diff = np.sqrt((sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2)
+    delta = (2 * np.pi * C * n * L / wavelength) * principal_stress_diff
+    return delta
+
+
+def compute_principal_angle(sigma_xx, sigma_yy, sigma_xy):
+    """
+    Compute the orientation angle of the principal stress direction.
+
+    Parameters
+    ----------
+    sigma_xx : float or array-like
+        Normal stress component in x direction (Pa).
+    sigma_yy : float or array-like
+        Normal stress component in y direction (Pa).
+    sigma_xy : float or array-like
+        Shear stress component (Pa).
+
+    Returns
+    -------
+    theta : float or array-like
+        Principal stress orientation angle (radians).
+    """
+    theta = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)
+    return theta
+
+
+def mueller_matrix(theta, delta):
+    """
+    Compute the Mueller matrix for a birefringent material.
+
+    Parameters
+    ----------
+    theta : float or array-like
+        Orientation angle of principal stress direction (radians).
+    delta : float or array-like
+        Retardance (radians).
+
+    Returns
+    -------
+    M : ndarray
+        Mueller matrix (4x4).
+    """
+    cos_2theta = np.cos(2 * theta)
+    sin_2theta = np.sin(2 * theta)
+    cos_delta = np.cos(delta)
+    sin_delta = np.sin(delta)
+
+    M = np.array(
+        [
+            [1, 0, 0, 0],
+            [
+                0,
+                cos_2theta**2 + sin_2theta**2 * cos_delta,
+                cos_2theta * sin_2theta * (1 - cos_delta),
+                -sin_2theta * sin_delta,
+            ],
+            [
+                0,
+                cos_2theta * sin_2theta * (1 - cos_delta),
+                sin_2theta**2 + cos_2theta**2 * cos_delta,
+                cos_2theta * sin_delta,
+            ],
+            [0, sin_2theta * sin_delta, -cos_2theta * sin_delta, cos_delta],
+        ]
+    )
+
+    return M
+
+
+def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength, S_i_hat):
+    """
+    Predict normalized Stokes vector components from stress tensor.
+
+    Parameters
+    ----------
+    sigma_xx : float
+        Normal stress component in x direction (Pa).
+    sigma_yy : float
+        Normal stress component in y direction (Pa).
+    sigma_xy : float
+        Shear stress component (Pa).
+    C : float
+        Stress-optic coefficient (1/Pa).
+    n : float
+        Refractive index or effective path factor (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    wavelength : float
+        Wavelength of light (m).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, 0, 0].
+
+    Returns
+    -------
+    S_p_hat : ndarray
+        Predicted normalized Stokes components [S1_hat, S2_hat].
+    """
+    theta = compute_principal_angle(sigma_xx, sigma_yy, sigma_xy)
+    delta = compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength)
+
+    M = mueller_matrix(theta, delta)
+
+    # Extend S_i_hat to full Stokes vector
+    S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], 0.0])
+
+    # Apply Mueller matrix
+    S_m = M @ S_i_full
+
+    # Return normalized components (excluding S0)
+    S_p_hat = S_m[1:3]
+
+    return S_p_hat
+
+
+def compute_residual(stress_params, S_m_hat, wavelengths, C_values, n, L, S_i_hat):
+    """
+    Compute residual between measured and predicted Stokes components.
+
+    Parameters
+    ----------
+    stress_params : array-like
+        Stress tensor components [sigma_xx, sigma_yy, sigma_xy].
+    S_m_hat : ndarray
+        Measured normalized Stokes components, shape (3, 2) for RGB channels.
+    wavelengths : array-like
+        Wavelengths for R, G, B channels (m).
+    C_values : array-like
+        Stress-optic coefficients for R, G, B channels (1/Pa).
+    n : float
+        Refractive index or effective path factor (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat].
+
+    Returns
+    -------
+    residual : float
+        Sum of squared residuals across all color channels.
+    """
+    sigma_xx, sigma_yy, sigma_xy = stress_params
+
+    residual = 0.0
+    for c in range(3):  # R, G, B
+        S_p_hat = predict_stokes(sigma_xx, sigma_yy, sigma_xy, C_values[c], n, L, wavelengths[c], S_i_hat)
+        diff = S_m_hat[c] - S_p_hat
+        residual += np.sum(diff**2)
+
+    return residual
+
+
+def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial_guess=None):
+    """
+    Recover stress tensor components by minimizing residual.
+
+    Parameters
+    ----------
+    S_m_hat : ndarray
+        Measured normalized Stokes components, shape (3, 2) for RGB channels.
+        Each row is [S1_hat, S2_hat] for a color channel.
+    wavelengths : array-like
+        Wavelengths for R, G, B channels (m).
+    C_values : array-like
+        Stress-optic coefficients for R, G, B channels (1/Pa).
+    n : float
+        Refractive index or effective path factor (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat].
+    initial_guess : array-like, optional
+        Initial guess for stress tensor [sigma_xx, sigma_yy, sigma_xy].
+        Default is [0, 0, 0].
+
+    Returns
+    -------
+    stress_tensor : ndarray
+        Recovered stress tensor components [sigma_xx, sigma_yy, sigma_xy].
+    success : bool
+        Whether optimization was successful.
+
+    Notes
+    -----
+    The multi-wavelength approach (3 wavelengths providing 6 measurements) enables
+    recovery of the full 2D stress tensor (3 components), not just the principal
+    stress difference. The different wavelengths provide different retardances for
+    the same stress state, creating an over-determined system.
+    """
+    if initial_guess is None:
+        initial_guess = np.array([0.0, 0.0, 0.0])
+
+    # Use Nelder-Mead for robustness - it doesn't require gradients
+    # and is more reliable for this type of inverse problem
+    result = minimize(
+        compute_residual,
+        initial_guess,
+        args=(S_m_hat, wavelengths, C_values, n, L, S_i_hat),
+        method="Nelder-Mead",
+        options={"xatol": 1e3, "fatol": 1e-10, "maxiter": 10000},
+    )
+
+    return result.x, result.success
+
+
+def compute_porosity(S0, S_ref, mu, L):
+    """
+    Compute porosity from intensity using Beer-Lambert law.
+
+    Parameters
+    ----------
+    S0 : array-like
+        Measured intensity (from color channel with absorptive dye).
+    S_ref : float
+        Reference light intensity before passing through sample.
+    mu : float
+        Absorption coefficient for the color channel (calibrated parameter).
+    L : float
+        Sample thickness (m).
+
+    Returns
+    -------
+    n : array-like
+        Porosity values.
+    """
+    # Beer-Lambert: S0 = S_ref * exp(-mu * n * L)
+    # Solving for n: n = -ln(S0 / S_ref) / (mu * L)
+    S0_safe = np.maximum(S0, 1e-10)
+    n = -np.log(S0_safe / S_ref) / (mu * L)
+    return n
+
+
+def recover_stress_map(
+    image_stack,
+    wavelengths,
+    C_values,
+    n,
+    L,
+    S_i_hat,
+    progress_callback=None,
+):
+    """
+    Recover full 2D stress tensor map from polarimetric image stack.
+
+    Parameters
+    ----------
+    image_stack : ndarray
+        Image stack of shape [H, W, 3, 4] where:
+        - H, W are image dimensions
+        - 3 color channels (R, G, B)
+        - 4 polarization angles (0, 45, 90, 135 degrees)
+    wavelengths : array-like
+        Wavelengths for R, G, B channels (m).
+    C_values : array-like
+        Stress-optic coefficients for R, G, B channels (1/Pa).
+    n : float or ndarray
+        Refractive index or effective path factor. Use 1.0 for solid samples.
+        Can be scalar or array matching image dimensions.
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat].
+    progress_callback : callable, optional
+        Function to call for progress updates. Called with (y, total_height).
+
+    Returns
+    -------
+    stress_map : ndarray
+        Array of shape [H, W, 3] containing [sigma_xx, sigma_yy, sigma_xy].
+    """
+    H, W, _, _ = image_stack.shape
+    stress_map = np.zeros((H, W, 3), dtype=np.float32)
+
+    for y in range(H):
+        if progress_callback is not None:
+            progress_callback(y, H)
+
+        for x in range(W):
+            # Get intensity measurements for all color channels
+            S_m_hat = np.zeros((3, 2))
+
+            for c in range(3):  # R, G, B
+                I = image_stack[y, x, c, :]
+
+                # Skip if any NaN values
+                if np.isnan(I).any():
+                    stress_map[y, x, :] = np.nan
+                    continue
+
+                # Compute Stokes components
+                S0, S1, S2 = compute_stokes_components(I[0], I[1], I[2], I[3])
+
+                # Compute normalized Stokes components
+                S1_hat, S2_hat = compute_normalized_stokes(S0, S1, S2)
+
+                S_m_hat[c, 0] = S1_hat
+                S_m_hat[c, 1] = S2_hat
+
+            # Get porosity value for this pixel
+            n_pixel = n if np.isscalar(n) else n[y, x]
+
+            # Recover stress tensor
+            stress_tensor, success = recover_stress_tensor(
+                S_m_hat, wavelengths, C_values, n_pixel, L, S_i_hat
+            )
+
+            if success:
+                stress_map[y, x, :] = stress_tensor
+            else:
+                stress_map[y, x, :] = np.nan
+
+    return stress_map
