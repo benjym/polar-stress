@@ -81,7 +81,9 @@ def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength):
     C : float
         Stress-optic coefficient for the color channel (1/Pa).
     n : float
-        Porosity.
+        Refractive index or effective path factor (dimensionless).
+        For solid samples, use n=1.0. For porous samples, this represents
+        the effective optical path length factor relative to sample thickness.
     L : float
         Sample thickness (m).
     wavelength : float
@@ -91,6 +93,11 @@ def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength):
     -------
     delta : float or array-like
         Retardance (radians).
+
+    Notes
+    -----
+    The retardance formula is: δ = (2πCnL/λ) * √[(σ_xx - σ_yy)² + 4σ_xy²]
+    where the principal stress difference determines the birefringence magnitude.
     """
     principal_stress_diff = np.sqrt((sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2)
     delta = (2 * np.pi * C * n * L / wavelength) * principal_stress_diff
@@ -177,7 +184,7 @@ def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength, S_i_hat):
     C : float
         Stress-optic coefficient (1/Pa).
     n : float
-        Porosity.
+        Refractive index or effective path factor (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
     wavelength : float
@@ -222,7 +229,7 @@ def compute_residual(stress_params, S_m_hat, wavelengths, C_values, n, L, S_i_ha
     C_values : array-like
         Stress-optic coefficients for R, G, B channels (1/Pa).
     n : float
-        Porosity.
+        Refractive index or effective path factor (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
     S_i_hat : array-like
@@ -258,7 +265,7 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial
     C_values : array-like
         Stress-optic coefficients for R, G, B channels (1/Pa).
     n : float
-        Porosity.
+        Refractive index or effective path factor (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
     S_i_hat : array-like
@@ -273,15 +280,25 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial
         Recovered stress tensor components [sigma_xx, sigma_yy, sigma_xy].
     success : bool
         Whether optimization was successful.
+
+    Notes
+    -----
+    The multi-wavelength approach (3 wavelengths providing 6 measurements) enables
+    recovery of the full 2D stress tensor (3 components), not just the principal
+    stress difference. The different wavelengths provide different retardances for
+    the same stress state, creating an over-determined system.
     """
     if initial_guess is None:
         initial_guess = np.array([0.0, 0.0, 0.0])
 
+    # Use Nelder-Mead for robustness - it doesn't require gradients
+    # and is more reliable for this type of inverse problem
     result = minimize(
         compute_residual,
         initial_guess,
         args=(S_m_hat, wavelengths, C_values, n, L, S_i_hat),
-        method="BFGS",
+        method="Nelder-Mead",
+        options={"xatol": 1e3, "fatol": 1e-10, "maxiter": 10000},
     )
 
     return result.x, result.success
@@ -338,7 +355,8 @@ def recover_stress_map(
     C_values : array-like
         Stress-optic coefficients for R, G, B channels (1/Pa).
     n : float or ndarray
-        Porosity value(s). Can be scalar or array matching image dimensions.
+        Refractive index or effective path factor. Use 1.0 for solid samples.
+        Can be scalar or array matching image dimensions.
     L : float
         Sample thickness (m).
     S_i_hat : array-like
