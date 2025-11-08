@@ -61,7 +61,8 @@ def load_raw(foldername):
 
 def split_channels(data):
     """
-    Splits the data into its respective polarisation channels. Each superpixel is 4x4 pixels, and the channels are arranged in the following order:
+    Splits the data into its respective polarisation channels. Each superpixel
+    is 4x4 pixels, and the channels are arranged in the following order:
 
     R_0 | R_45 | G1_0 | G1_45
     R_135 | R_90 | G1_135 | G1_90

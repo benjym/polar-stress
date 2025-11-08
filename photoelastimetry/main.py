@@ -1,8 +1,6 @@
-import sys, os
 import argparse
 import json5
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 import photoelastimetry.plotting
 import photoelastimetry.local
@@ -139,7 +137,7 @@ def stress_to_image(params):
     delta = (2 * np.pi * params["t"] / params["lambda_light"]) * params["C"] * delta_sigma
 
     # Fringe order
-    N = delta / (2 * np.pi)
+    # N = delta / (2 * np.pi)
 
     # Visualize Isochromatic Fringe Pattern
     fringe_intensity = np.sin(delta / 2) ** 2  # Fringe pattern
