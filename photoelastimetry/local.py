@@ -343,11 +343,11 @@ def compute_solid_fraction(S0, S_ref, mu, L):
 def _process_pixel(args):
     """
     Process a single pixel to recover stress tensor.
-    
+
     Helper function for parallel processing in recover_stress_map.
     """
     y, x, image_stack, wavelengths, C_values, nu, L, S_i_hat = args
-    
+
     # Get intensity measurements for all colour channels
     S_m_hat = np.zeros((3, 2))
 
@@ -371,9 +371,7 @@ def _process_pixel(args):
     nu_pixel = nu if np.isscalar(nu) else nu[y, x]
 
     # Recover stress tensor
-    stress_tensor, success = recover_stress_tensor(
-        S_m_hat, wavelengths, C_values, nu_pixel, L, S_i_hat
-    )
+    stress_tensor, success = recover_stress_tensor(S_m_hat, wavelengths, C_values, nu_pixel, L, S_i_hat)
 
     if success:
         return (y, x, stress_tensor)
@@ -420,25 +418,21 @@ def recover_stress_map(
         Array of shape [H, W, 3] containing [sigma_xx, sigma_yy, sigma_xy].
     """
     from joblib import Parallel, delayed
-    
+
     H, W, _, _ = image_stack.shape
     stress_map = np.zeros((H, W, 3), dtype=np.float32)
 
     # Create list of all pixel coordinates
     pixel_coords = [(y, x) for y in range(H) for x in range(W)]
-    
+
     # Create arguments for each pixel
-    pixel_args = [
-        (y, x, image_stack, wavelengths, C_values, nu, L, S_i_hat)
-        for y, x in pixel_coords
-    ]
-    
+    pixel_args = [(y, x, image_stack, wavelengths, C_values, nu, L, S_i_hat) for y, x in pixel_coords]
+
     # Process pixels in parallel
     results = Parallel(n_jobs=n_jobs)(
-        delayed(_process_pixel)(args) 
-        for args in tqdm(pixel_args, desc="Processing pixels")
+        delayed(_process_pixel)(args) for args in tqdm(pixel_args, desc="Processing pixels")
     )
-    
+
     # Fill in the stress map
     for y, x, stress_tensor in results:
         stress_map[y, x, :] = stress_tensor
