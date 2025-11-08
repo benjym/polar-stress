@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors
-import polar_stress.io
+import photoelastimetry.io
 
 _virino_list = [
     [9.8857443e-01, 9.9435500e-01, 6.2314191e-01],
@@ -271,9 +271,7 @@ def virino():
         The virino colormap
     """
 
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
-        "virino", _virino_list
-    )
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("virino", _virino_list)
     return cmap
 
 

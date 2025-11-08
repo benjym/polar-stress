@@ -4,13 +4,13 @@ import json5
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
-import polar_stress.plotting
-import polar_stress.image
-import polar_stress.io
+import photoelastimetry.plotting
+import photoelastimetry.image
+import photoelastimetry.io
 
 
 def image_to_stress(params):
-    data, metadata = polar_stress.io.load_raw(params["folderName"])
+    data, metadata = photoelastimetry.io.load_raw(params["folderName"])
     if params.get("crop") is not None:
         data = data[
             params["crop"][0] : params["crop"][1],
@@ -20,14 +20,14 @@ def image_to_stress(params):
         ]
 
     if params["debug"]:
-        polar_stress.plotting.show_all_channels(data, metadata)
+        photoelastimetry.plotting.show_all_channels(data, metadata)
 
     # Calculate the Degree of Linear Polarisation (DoLP)
-    DoLP = polar_stress.image.DoLP(data)
-    AoLP = polar_stress.image.AoLP(data)
+    DoLP = photoelastimetry.image.DoLP(data)
+    AoLP = photoelastimetry.image.AoLP(data)
 
     # Plot the results
-    polar_stress.plotting.plot_DoLP_AoLP(DoLP, AoLP, filename="DoLP_AoLP.png")
+    photoelastimetry.plotting.plot_DoLP_AoLP(DoLP, AoLP, filename="DoLP_AoLP.png")
 
 
 def stress_to_image(params):
@@ -66,11 +66,7 @@ def stress_to_image(params):
     # Stress difference and retardation
     delta_sigma = sigma_1 - sigma_2
 
-    delta = (
-        (2 * np.pi * params["t"] / params["lambda_light"])
-        * params["C"]
-        * delta_sigma
-    )  # Retardation
+    delta = (2 * np.pi * params["t"] / params["lambda_light"]) * params["C"] * delta_sigma  # Retardation
 
     # Fringe order
     N = delta / (2 * np.pi)
@@ -79,18 +75,14 @@ def stress_to_image(params):
     fringe_intensity = np.sin(delta / 2) ** 2  # Fringe pattern
 
     # Isoclinic angle (principal stress orientation)
-    phi = 0.5 * np.arctan2(
-        2 * sigma_xy, sigma_xx - sigma_yy
-    )  # Angle in radians
+    phi = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)  # Angle in radians
 
     # Plot the results
     plotting.plot_fringe_pattern(fringe_intensity, phi, filename="output.png")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Process stress data and generate fringe patterns."
-    )
+    parser = argparse.ArgumentParser(description="Process stress data and generate fringe patterns.")
     parser.add_argument(
         "json_filename",
         type=str,

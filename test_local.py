@@ -8,7 +8,7 @@ the full stress tensor, not just the principal stress difference.
 
 import numpy as np
 import sys
-from polar_stress.local import (
+from photoelastimetry.local import (
     compute_stokes_components,
     compute_normalized_stokes,
     compute_retardance,
@@ -22,9 +22,7 @@ from polar_stress.local import (
 
 # Test parameters
 WAVELENGTHS = np.array([650e-9, 550e-9, 450e-9])  # R, G, B in meters
-C_VALUES = np.array(
-    [2e-12, 2.2e-12, 2.5e-12]
-)  # Different C for each wavelength
+C_VALUES = np.array([2e-12, 2.2e-12, 2.5e-12])  # Different C for each wavelength
 NU = 1.0  # Solid fraction
 L = 0.01  # Sample thickness (m)
 S_I_HAT = np.array([0.1, 0.2])  # Incoming polarization
@@ -49,9 +47,7 @@ def test_stokes_components():
     assert np.isclose(S1, I_0 - I_90), "S1 = I_0 - I_90"
     assert np.isclose(S2, I_45 - I_135), "S2 = I_45 - I_135"
 
-    print(
-        f"  Input intensities: I_0={I_0}, I_45={I_45}, I_90={I_90}, I_135={I_135}"
-    )
+    print(f"  Input intensities: I_0={I_0}, I_45={I_45}, I_90={I_90}, I_135={I_135}")
     print(f"  Computed: S0={S0:.4f}, S1={S1:.4f}, S2={S2:.4f}")
     print("  ✓ PASSED: Stokes components correctly computed")
     return True
@@ -78,20 +74,14 @@ def test_retardance():
     print_separator("TEST 3: Retardance Computation")
 
     sigma_xx, sigma_yy, sigma_xy = 2e6, -1e6, 0.5e6
-    delta = compute_retardance(
-        sigma_xx, sigma_yy, sigma_xy, C_VALUES[1], NU, L, WAVELENGTHS[1]
-    )
+    delta = compute_retardance(sigma_xx, sigma_yy, sigma_xy, C_VALUES[1], NU, L, WAVELENGTHS[1])
 
     # Verify formula: delta = (2*pi*C*n*L/lambda) * sqrt((sigma_xx-sigma_yy)^2 + 4*sigma_xy^2)
     psd = np.sqrt((sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2)
     expected_delta = (2 * np.pi * C_VALUES[1] * NU * L / WAVELENGTHS[1]) * psd
-    assert np.isclose(
-        delta, expected_delta
-    ), "Retardance formula verification"
+    assert np.isclose(delta, expected_delta), "Retardance formula verification"
 
-    print(
-        f"  Stress: σ_xx={sigma_xx/1e6:.2f} MPa, σ_yy={sigma_yy/1e6:.2f} MPa, σ_xy={sigma_xy/1e6:.2f} MPa"
-    )
+    print(f"  Stress: σ_xx={sigma_xx/1e6:.2f} MPa, σ_yy={sigma_yy/1e6:.2f} MPa, σ_xy={sigma_xy/1e6:.2f} MPa")
     print(f"  Principal stress difference: {psd/1e6:.4f} MPa")
     print(f"  Retardance: δ={delta:.4f} rad")
     print("  ✓ PASSED: Retardance correctly computed")
@@ -106,9 +96,7 @@ def test_principal_angle():
     sigma_xx, sigma_yy, sigma_xy = 1e6, 1e6, 1e6
     theta = compute_principal_angle(sigma_xx, sigma_yy, sigma_xy)
     expected_theta = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)
-    assert np.isclose(
-        theta, expected_theta
-    ), "Principal angle formula verification"
+    assert np.isclose(theta, expected_theta), "Principal angle formula verification"
     print(
         f"  Case 1 - Pure shear: σ_xx={sigma_xx/1e6:.2f} MPa, σ_yy={sigma_yy/1e6:.2f} MPa, σ_xy={sigma_xy/1e6:.2f} MPa"
     )
@@ -161,13 +149,9 @@ def test_forward_model():
     print("\n  Predicted Stokes for each wavelength:")
 
     for i, (wl, C) in enumerate(zip(WAVELENGTHS, C_VALUES)):
-        S_p = predict_stokes(
-            sigma_xx, sigma_yy, sigma_xy, C, NU, L, wl, S_I_HAT
-        )
+        S_p = predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, NU, L, wl, S_I_HAT)
         color = ["Red", "Green", "Blue"][i]
-        print(
-            f"    {color:5s} ({wl*1e9:.0f}nm): [{S_p[0]:+.6f}, {S_p[1]:+.6f}]"
-        )
+        print(f"    {color:5s} ({wl*1e9:.0f}nm): [{S_p[0]:+.6f}, {S_p[1]:+.6f}]")
 
     print("  ✓ PASSED: Forward model produces predictions")
     return True
@@ -230,10 +214,7 @@ def test_stress_recovery_uniaxial():
 
     # Principal stress difference should match well
     psd_true = abs(sigma_xx_true - sigma_yy_true)
-    psd_recovered = np.sqrt(
-        (stress_recovered[0] - stress_recovered[1]) ** 2
-        + 4 * stress_recovered[2] ** 2
-    )
+    psd_recovered = np.sqrt((stress_recovered[0] - stress_recovered[1]) ** 2 + 4 * stress_recovered[2] ** 2)
     psd_error = abs(psd_recovered - psd_true) / 1e6
 
     print(f"\n  Principal stress difference:")
@@ -294,13 +275,8 @@ def test_stress_recovery_biaxial():
     print(f"    σ_xy = {stress_recovered[2]/1e6:+.4f} MPa")
 
     # Check principal stress difference
-    psd_true = np.sqrt(
-        (sigma_xx_true - sigma_yy_true) ** 2 + 4 * sigma_xy_true**2
-    )
-    psd_recovered = np.sqrt(
-        (stress_recovered[0] - stress_recovered[1]) ** 2
-        + 4 * stress_recovered[2] ** 2
-    )
+    psd_true = np.sqrt((sigma_xx_true - sigma_yy_true) ** 2 + 4 * sigma_xy_true**2)
+    psd_recovered = np.sqrt((stress_recovered[0] - stress_recovered[1]) ** 2 + 4 * stress_recovered[2] ** 2)
 
     print(f"\n  Principal stress difference:")
     print(f"    True:      {psd_true/1e6:.4f} MPa")
@@ -360,24 +336,15 @@ def test_stress_recovery_with_shear():
     print(f"    σ_xy = {stress_recovered[2]/1e6:+.4f} MPa")
 
     # Check all components
-    theta_true = compute_principal_angle(
-        sigma_xx_true, sigma_yy_true, sigma_xy_true
-    )
-    theta_recovered = compute_principal_angle(
-        stress_recovered[0], stress_recovered[1], stress_recovered[2]
-    )
+    theta_true = compute_principal_angle(sigma_xx_true, sigma_yy_true, sigma_xy_true)
+    theta_recovered = compute_principal_angle(stress_recovered[0], stress_recovered[1], stress_recovered[2])
 
     print(f"\n  Principal angle:")
     print(f"    True:      {np.rad2deg(theta_true):.2f}°")
     print(f"    Recovered: {np.rad2deg(theta_recovered):.2f}°")
 
-    psd_true = np.sqrt(
-        (sigma_xx_true - sigma_yy_true) ** 2 + 4 * sigma_xy_true**2
-    )
-    psd_recovered = np.sqrt(
-        (stress_recovered[0] - stress_recovered[1]) ** 2
-        + 4 * stress_recovered[2] ** 2
-    )
+    psd_true = np.sqrt((sigma_xx_true - sigma_yy_true) ** 2 + 4 * sigma_xy_true**2)
+    psd_recovered = np.sqrt((stress_recovered[0] - stress_recovered[1]) ** 2 + 4 * stress_recovered[2] ** 2)
 
     print(f"\n  Principal stress difference:")
     print(f"    True:      {psd_true/1e6:.4f} MPa")
@@ -414,13 +381,7 @@ def test_solid_fraction():
 def run_all_tests():
     """Run all tests and report results."""
     print("\n" + "╔" + "═" * 68 + "╗")
-    print(
-        "║"
-        + " " * 15
-        + "COMPREHENSIVE TEST SUITE FOR LOCAL.PY"
-        + " " * 15
-        + "║"
-    )
+    print("║" + " " * 15 + "COMPREHENSIVE TEST SUITE FOR LOCAL.PY" + " " * 15 + "║")
     print("╚" + "═" * 68 + "╝")
 
     tests = [
