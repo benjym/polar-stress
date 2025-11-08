@@ -17,6 +17,7 @@ dependencies = [
     "tqdm",
     "json5",
     "tifffile",
+    "joblib",
     "black",
     "flake8",
     "mkdocs",

@@ -18,7 +18,7 @@ def image_to_stress(params, output_filename=None):
     Args:
         params (dict): Configuration dictionary containing:
             - folderName (str): Path to folder containing raw photoelastic images
-            - crop (list, optional): Crop region as [y1, y2, x1, x2]
+            - crop (list, optional): Crop region as [x1, x2, y1, y2]
             - debug (bool): If True, display all channels for debugging
             - C (float): Stress-optic coefficient in 1/Pa
             - thickness (float): Sample thickness in meters
@@ -26,7 +26,7 @@ def image_to_stress(params, output_filename=None):
             - polariser_angle (float, optional): Polariser angle in degrees relative to the 0 degree camera axis.
               Defaults to 0.0.
         output_filename (str, optional): Path to save the output stress map image.
-            If None, the stress map is not saved. Defaults to None.
+            If None, the stress map is not saved. Defaults to None. Can also be specified in params.
 
     Returns:
         numpy.ndarray: 2D array representing the stress map in Pascals.
@@ -47,6 +47,17 @@ def image_to_stress(params, output_filename=None):
             :,
             :,
         ]
+
+    if params["debug"]:
+        import matplotlib.pyplot as plt
+
+        plt.imsave("debug_before_binning.png", data[:, :, 0, 0])
+
+    if params.get("binning") is not None:
+        binning = params["binning"]
+        data = photoelastimetry.io.bin_image(data, binning)
+        metadata["height"] //= binning
+        metadata["width"] //= binning
 
     if params["debug"]:
         photoelastimetry.plotting.show_all_channels(data, metadata)
@@ -72,6 +83,7 @@ def image_to_stress(params, output_filename=None):
     # S_I_HAT = np.array([1.0, 0.0])  # Incoming light is fully S1 polarized
 
     # Calculate stress map from image
+    n_jobs = params.get("n_jobs", -1)  # Default to using all cores
     stress_map = photoelastimetry.local.recover_stress_map(
         data,
         WAVELENGTHS,
@@ -79,7 +91,12 @@ def image_to_stress(params, output_filename=None):
         NU,
         L,
         S_I_HAT,
+        n_jobs=n_jobs,
     )
+
+    if params.get("output_filename") is not None:
+        output_filename = params["output_filename"]
+
     if output_filename is not None:
         photoelastimetry.io.save_image(output_filename, stress_map, metadata)
 

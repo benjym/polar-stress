@@ -31,9 +31,9 @@ def compute_stokes_components(I_0, I_45, I_90, I_135):
     S0 : array-like
         Total intensity (sum of orthogonal components).
     S1 : array-like
-        Linear polarization along 0-90 degrees.
+        Linear polarisation along 0-90 degrees.
     S2 : array-like
-        Linear polarization along 45-135 degrees.
+        Linear polarisation along 45-135 degrees.
     """
     S0 = I_0 + I_90
     S1 = I_0 - I_90
@@ -50,9 +50,9 @@ def compute_normalized_stokes(S0, S1, S2):
     S0 : array-like
         Total intensity Stokes parameter.
     S1 : array-like
-        First linear polarization Stokes parameter.
+        First linear polarisation Stokes parameter.
     S2 : array-like
-        Second linear polarization Stokes parameter.
+        Second linear polarisation Stokes parameter.
 
     Returns
     -------
@@ -80,7 +80,7 @@ def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength):
     sigma_xy : float or array-like
         Shear stress component (Pa).
     C : float
-        Stress-optic coefficient for the color channel (1/Pa).
+        Stress-optic coefficient for the colour channel (1/Pa).
     nu : float
         Solid fraction (dimensionless).
         For solid samples, use nu=1.0. For porous samples, this represents
@@ -245,7 +245,7 @@ def compute_residual(stress_params, S_m_hat, wavelengths, C_values, nu, L, S_i_h
     Returns
     -------
     residual : float
-        Sum of squared residuals across all color channels.
+        Sum of squared residuals across all colour channels.
     """
     sigma_xx, sigma_yy, sigma_xy = stress_params
 
@@ -275,7 +275,7 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initia
     ----------
     S_m_hat : ndarray
         Measured normalized Stokes components, shape (3, 2) for RGB channels.
-        Each row is [S1_hat, S2_hat] for a color channel.
+        Each row is [S1_hat, S2_hat] for a colour channel.
     wavelengths : array-like
         Wavelengths for R, G, B channels (m).
     C_values : array-like
@@ -320,11 +320,11 @@ def compute_solid_fraction(S0, S_ref, mu, L):
     Parameters
     ----------
     S0 : array-like
-        Measured intensity (from color channel with absorptive dye).
+        Measured intensity (from colour channel with absorptive dye).
     S_ref : float
         Reference light intensity before passing through sample.
     mu : float
-        Absorption coefficient for the color channel (calibrated parameter).
+        Absorption coefficient for the colour channel (calibrated parameter).
     L : float
         Sample thickness (m).
 
@@ -340,6 +340,47 @@ def compute_solid_fraction(S0, S_ref, mu, L):
     return nu
 
 
+def _process_pixel(args):
+    """
+    Process a single pixel to recover stress tensor.
+    
+    Helper function for parallel processing in recover_stress_map.
+    """
+    y, x, image_stack, wavelengths, C_values, nu, L, S_i_hat = args
+    
+    # Get intensity measurements for all colour channels
+    S_m_hat = np.zeros((3, 2))
+
+    for c in range(3):  # R, G, B
+        I = image_stack[y, x, c, :]
+
+        # Skip if any NaN values
+        if np.isnan(I).any():
+            return (y, x, np.array([np.nan, np.nan, np.nan]))
+
+        # Compute Stokes components
+        S0, S1, S2 = compute_stokes_components(I[0], I[1], I[2], I[3])
+
+        # Compute normalized Stokes components
+        S1_hat, S2_hat = compute_normalized_stokes(S0, S1, S2)
+
+        S_m_hat[c, 0] = S1_hat
+        S_m_hat[c, 1] = S2_hat
+
+    # Get porosity value for this pixel
+    nu_pixel = nu if np.isscalar(nu) else nu[y, x]
+
+    # Recover stress tensor
+    stress_tensor, success = recover_stress_tensor(
+        S_m_hat, wavelengths, C_values, nu_pixel, L, S_i_hat
+    )
+
+    if success:
+        return (y, x, stress_tensor)
+    else:
+        return (y, x, np.array([np.nan, np.nan, np.nan]))
+
+
 def recover_stress_map(
     image_stack,
     wavelengths,
@@ -347,6 +388,7 @@ def recover_stress_map(
     nu,
     L,
     S_i_hat,
+    n_jobs=-1,
 ):
     """
     Recover full 2D stress tensor map from polarimetric image stack.
@@ -356,8 +398,8 @@ def recover_stress_map(
     image_stack : ndarray
         Image stack of shape [H, W, 3, 4] where:
         - H, W are image dimensions
-        - 3 color channels (R, G, B)
-        - 4 polarization angles (0, 45, 90, 135 degrees)
+        - 3 colour channels (R, G, B)
+        - 4 polarisation angles (0, 45, 90, 135 degrees)
     wavelengths : array-like
         Wavelengths for R, G, B channels (m).
     C_values : array-like
@@ -369,49 +411,37 @@ def recover_stress_map(
         Sample thickness (m).
     S_i_hat : array-like
         Incoming normalized Stokes vector [S1_hat, S2_hat].
+    n_jobs : int, optional
+        Number of parallel jobs. -1 uses all available cores (default: -1).
 
     Returns
     -------
     stress_map : ndarray
         Array of shape [H, W, 3] containing [sigma_xx, sigma_yy, sigma_xy].
     """
+    from joblib import Parallel, delayed
+    
     H, W, _, _ = image_stack.shape
     stress_map = np.zeros((H, W, 3), dtype=np.float32)
 
-    for y in tqdm(range(H)):
-        for x in tqdm(range(W), leave=False):
-            # Get intensity measurements for all color channels
-            S_m_hat = np.zeros((3, 2))
-
-            for c in range(3):  # R, G, B
-                I = image_stack[y, x, c, :]
-
-                # Skip if any NaN values
-                if np.isnan(I).any():
-                    stress_map[y, x, :] = np.nan
-                    continue
-
-                # Compute Stokes components
-                S0, S1, S2 = compute_stokes_components(I[0], I[1], I[2], I[3])
-
-                # Compute normalized Stokes components
-                S1_hat, S2_hat = compute_normalized_stokes(S0, S1, S2)
-
-                S_m_hat[c, 0] = S1_hat
-                S_m_hat[c, 1] = S2_hat
-
-            # Get porosity value for this pixel
-            nu_pixel = nu if np.isscalar(nu) else nu[y, x]
-
-            # Recover stress tensor
-            stress_tensor, success = recover_stress_tensor(
-                S_m_hat, wavelengths, C_values, nu_pixel, L, S_i_hat
-            )
-
-            if success:
-                stress_map[y, x, :] = stress_tensor
-            else:
-                stress_map[y, x, :] = np.nan
+    # Create list of all pixel coordinates
+    pixel_coords = [(y, x) for y in range(H) for x in range(W)]
+    
+    # Create arguments for each pixel
+    pixel_args = [
+        (y, x, image_stack, wavelengths, C_values, nu, L, S_i_hat)
+        for y, x in pixel_coords
+    ]
+    
+    # Process pixels in parallel
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(_process_pixel)(args) 
+        for args in tqdm(pixel_args, desc="Processing pixels")
+    )
+    
+    # Fill in the stress map
+    for y, x, stress_tensor in results:
+        stress_map[y, x, :] = stress_tensor
 
     return stress_map
 
@@ -431,10 +461,10 @@ if __name__ == "__main__":
     # Display input image for reference
     plt.figure(figsize=(10, 5), layout="constrained")
     for i, angle in enumerate([0, 45, 90, 135]):
-        for j, color in enumerate(["R", "G", "B"]):
+        for j, colour in enumerate(["R", "G", "B"]):
             plt.subplot(4, 3, i * 3 + j + 1)
             plt.imshow(image_stack[:, :, j, i], cmap="gray")
-            plt.title(f"Polarizer {angle}° ({color} channel)")
+            plt.title(f"Polarizer {angle}° ({colour} channel)")
     plt.savefig("input_image_stack.png")
 
     # Material and experimental parameters
@@ -465,7 +495,7 @@ if __name__ == "__main__":
 
     # plt.figure()
     # plt.imshow(NU, cmap="viridis")
-    # plt.colorbar(label="Solid Fraction (nu)")
+    # plt.colourbar(label="Solid Fraction (nu)")
     # plt.title("Computed Solid Fraction Map")
     # plt.savefig("solid_fraction_map.png")
 
@@ -484,6 +514,6 @@ if __name__ == "__main__":
     for i, comp in enumerate(["Sigma_xx", "Sigma_yy", "Sigma_xy"]):
         plt.subplot(1, 3, i + 1)
         plt.imshow(stress_map[:, :, i], cmap="plasma")
-        plt.colorbar(label="Stress (Pa)")
+        plt.colourbar(label="Stress (Pa)")
         plt.title(comp)
     plt.savefig("recovered_stress_map.png")

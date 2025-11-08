@@ -9,7 +9,7 @@ from plotting import virino
 virino_cmap = virino()
 
 
-def simulate_four_step_polarimetry(retardation, theta_p, I0=1.0, polarization_efficiency=0.9):
+def simulate_four_step_polarimetry(retardation, theta_p, I0=1.0, polarisation_efficiency=0.9):
     """
     Simulate four-step polarimetry for photoelasticity using proper Jones matrices
 
@@ -31,12 +31,12 @@ def simulate_four_step_polarimetry(retardation, theta_p, I0=1.0, polarization_ef
     intensities = []
 
     # Add unpolarized background (10-20% typical)
-    I_unpolarized = (1 - polarization_efficiency) * I0
+    I_unpolarized = (1 - polarisation_efficiency) * I0
 
     for alpha in analyzer_angles:
         I = (
             I0
-            * polarization_efficiency
+            * polarisation_efficiency
             * np.sin(retardation / 2) ** 2
             * (1 + np.cos(4 * theta_p - 2 * alpha))
             / 2
@@ -132,7 +132,7 @@ def diametrical_stress_cartesian(X, Y, P, R):
     return sigma_xx, sigma_yy, tau_xy
 
 
-def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, C, polarization_efficiency):
+def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, C, polarisation_efficiency):
     """
     Generate synthetic Brazil test data for validation
     This function creates a synthetic dataset based on the analytical solution
@@ -166,7 +166,7 @@ def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, 
 
         # Generate four-step polarimetry images
         I0_pol, I45_pol, I90_pol, I135_pol = simulate_four_step_polarimetry(
-            delta, theta_p, polarization_efficiency
+            delta, theta_p, polarisation_efficiency
         )
 
         synthetic_images[:, :, i, 0] = I0_pol
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     C = params["C"]  # Stress-optic coefficient (Pa^-1) - typical for photoelastic materials
     thickness = params["thickness"]  # Thickness in m
     wavelengths_nm = np.array(params["wavelengths"])  # Wavelengths in nm
-    polarization_efficiency = params["polarization_efficiency"]  # Polarization efficiency (0-1)
+    polarisation_efficiency = params["polarisation_efficiency"]  # Polarisation efficiency (0-1)
 
     # Grid in polar coordinates
     n = 20
@@ -487,7 +487,7 @@ if __name__ == "__main__":
         wavelengths_nm,
         thickness,
         C,
-        polarization_efficiency,
+        polarisation_efficiency,
     )
 
     # Save the output data

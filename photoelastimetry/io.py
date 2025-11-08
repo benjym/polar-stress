@@ -234,3 +234,36 @@ def load_image(filename, metadata=None):
         raise ValueError(
             f"Unsupported file format for {filename}. Supported formats are .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif"
         )
+
+
+def bin_image(data, binning):
+    """
+    Bin the image by the specified factor.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Input image data to be binned.
+    binning : int
+        Binning factor. The image dimensions will be reduced by this factor.
+
+    Returns
+    -------
+    numpy.ndarray
+        Binned image data.
+    """
+    if binning <= 1:
+        return data
+
+    # Calculate new shape
+    new_height = data.shape[0] // binning
+    new_width = data.shape[1] // binning
+
+    # Reshape and bin
+    binned_data = (
+        data[: new_height * binning, : new_width * binning]
+        .reshape(new_height, binning, new_width, binning, *data.shape[2:])
+        .mean(axis=(1, 3))
+    )
+
+    return binned_data
