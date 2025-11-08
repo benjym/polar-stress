@@ -36,7 +36,9 @@ def read_raw(filename, metadata):
 def load_raw(foldername):
     json_file = foldername + "/recordingMetadata.json"
     if not os.path.exists(json_file):
-        raise ValueError(f"Metadata file {json_file} does not exist. Please check the folder name.")
+        raise ValueError(
+            f"Metadata file {json_file} does not exist. Please check the folder name."
+        )
 
     frame_folder = foldername + "/0000000/"
     all_frames = glob(frame_folder + "frame*.raw")
@@ -129,7 +131,15 @@ if __name__ == "__main__":
 
     # write a raw binary file - single precision float
     for i, colour in enumerate(["R", "G1", "G2", "B"]):
-        plt.imsave(f"DoLP_{colour}.png", DoLP[..., i], cmap="gray", vmin=0, vmax=1)
-        plt.imsave(f"AoLP_{colour}.png", AoLP[..., i], cmap="gray", vmin=0, vmax=2 * np.pi)
+        plt.imsave(
+            f"DoLP_{colour}.png", DoLP[..., i], cmap="gray", vmin=0, vmax=1
+        )
+        plt.imsave(
+            f"AoLP_{colour}.png",
+            AoLP[..., i],
+            cmap="gray",
+            vmin=0,
+            vmax=2 * np.pi,
+        )
         with open(f"AoLP_{colour}.raw", "wb") as f:
             f.write(AoLP[..., i].astype(np.float32).tobytes())

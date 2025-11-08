@@ -1,6 +1,6 @@
 [project]
 name = "polar-stress"
-version = "0.1"
+version = "0.2"
 requires-python = ">=3.9"
 authors = [
   {name = "Benjy Marks", email = "benjy.marks@sydney.edu.au"},
@@ -32,7 +32,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.black]
-line-length = 110
+line-length = 78
 target-version = ['py311']
 
 [tool.setuptools]

@@ -12,7 +12,12 @@ import polar_stress.io
 def image_to_stress(params):
     data, metadata = polar_stress.io.load_raw(params["folderName"])
     if params.get("crop") is not None:
-        data = data[params["crop"][0] : params["crop"][1], params["crop"][2] : params["crop"][3], :, :]
+        data = data[
+            params["crop"][0] : params["crop"][1],
+            params["crop"][2] : params["crop"][3],
+            :,
+            :,
+        ]
 
     if params["debug"]:
         polar_stress.plotting.show_all_channels(data, metadata)
@@ -61,7 +66,11 @@ def stress_to_image(params):
     # Stress difference and retardation
     delta_sigma = sigma_1 - sigma_2
 
-    delta = (2 * np.pi * params["t"] / params["lambda_light"]) * params["C"] * delta_sigma  # Retardation
+    delta = (
+        (2 * np.pi * params["t"] / params["lambda_light"])
+        * params["C"]
+        * delta_sigma
+    )  # Retardation
 
     # Fringe order
     N = delta / (2 * np.pi)
@@ -70,15 +79,23 @@ def stress_to_image(params):
     fringe_intensity = np.sin(delta / 2) ** 2  # Fringe pattern
 
     # Isoclinic angle (principal stress orientation)
-    phi = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)  # Angle in radians
+    phi = 0.5 * np.arctan2(
+        2 * sigma_xy, sigma_xx - sigma_yy
+    )  # Angle in radians
 
     # Plot the results
     plotting.plot_fringe_pattern(fringe_intensity, phi, filename="output.png")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process stress data and generate fringe patterns.")
-    parser.add_argument("json_filename", type=str, help="Path to the JSON file with parameters.")
+    parser = argparse.ArgumentParser(
+        description="Process stress data and generate fringe patterns."
+    )
+    parser.add_argument(
+        "json_filename",
+        type=str,
+        help="Path to the JSON file with parameters.",
+    )
     args = parser.parse_args()
 
     params = json5.load(open(args.json_filename, "r"))

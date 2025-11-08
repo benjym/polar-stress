@@ -66,7 +66,7 @@ def compute_normalized_stokes(S0, S1, S2):
     return S1_hat, S2_hat
 
 
-def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength):
+def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength):
     """
     Compute retardance for a given stress tensor and material properties.
 
@@ -80,9 +80,9 @@ def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength):
         Shear stress component (Pa).
     C : float
         Stress-optic coefficient for the color channel (1/Pa).
-    n : float
-        Refractive index or effective path factor (dimensionless).
-        For solid samples, use n=1.0. For porous samples, this represents
+    nu : float
+        Solid fraction (dimensionless).
+        For solid samples, use nu=1.0. For porous samples, this represents
         the effective optical path length factor relative to sample thickness.
     L : float
         Sample thickness (m).
@@ -99,8 +99,10 @@ def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength):
     The retardance formula is: δ = (2πCnL/λ) * √[(σ_xx - σ_yy)² + 4σ_xy²]
     where the principal stress difference determines the birefringence magnitude.
     """
-    principal_stress_diff = np.sqrt((sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2)
-    delta = (2 * np.pi * C * n * L / wavelength) * principal_stress_diff
+    principal_stress_diff = np.sqrt(
+        (sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2
+    )
+    delta = (2 * np.pi * C * nu * L / wavelength) * principal_stress_diff
     return delta
 
 
@@ -169,7 +171,9 @@ def mueller_matrix(theta, delta):
     return M
 
 
-def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength, S_i_hat):
+def predict_stokes(
+    sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat
+):
     """
     Predict normalized Stokes vector components from stress tensor.
 
@@ -183,8 +187,8 @@ def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength, S_i_hat):
         Shear stress component (Pa).
     C : float
         Stress-optic coefficient (1/Pa).
-    n : float
-        Refractive index or effective path factor (use 1.0 for solid samples).
+    nu : float
+        Solid fraction (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
     wavelength : float
@@ -198,7 +202,9 @@ def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength, S_i_hat):
         Predicted normalized Stokes components [S1_hat, S2_hat].
     """
     theta = compute_principal_angle(sigma_xx, sigma_yy, sigma_xy)
-    delta = compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength)
+    delta = compute_retardance(
+        sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength
+    )
 
     M = mueller_matrix(theta, delta)
 
@@ -214,7 +220,9 @@ def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, n, L, wavelength, S_i_hat):
     return S_p_hat
 
 
-def compute_residual(stress_params, S_m_hat, wavelengths, C_values, n, L, S_i_hat):
+def compute_residual(
+    stress_params, S_m_hat, wavelengths, C_values, nu, L, S_i_hat
+):
     """
     Compute residual between measured and predicted Stokes components.
 
@@ -228,8 +236,8 @@ def compute_residual(stress_params, S_m_hat, wavelengths, C_values, n, L, S_i_ha
         Wavelengths for R, G, B channels (m).
     C_values : array-like
         Stress-optic coefficients for R, G, B channels (1/Pa).
-    n : float
-        Refractive index or effective path factor (use 1.0 for solid samples).
+    nu : float
+        Solid fraction (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
     S_i_hat : array-like
@@ -244,14 +252,25 @@ def compute_residual(stress_params, S_m_hat, wavelengths, C_values, n, L, S_i_ha
 
     residual = 0.0
     for c in range(3):  # R, G, B
-        S_p_hat = predict_stokes(sigma_xx, sigma_yy, sigma_xy, C_values[c], n, L, wavelengths[c], S_i_hat)
+        S_p_hat = predict_stokes(
+            sigma_xx,
+            sigma_yy,
+            sigma_xy,
+            C_values[c],
+            nu,
+            L,
+            wavelengths[c],
+            S_i_hat,
+        )
         diff = S_m_hat[c] - S_p_hat
         residual += np.sum(diff**2)
 
     return residual
 
 
-def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial_guess=None):
+def recover_stress_tensor(
+    S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initial_guess=None
+):
     """
     Recover stress tensor components by minimizing residual.
 
@@ -264,8 +283,8 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial
         Wavelengths for R, G, B channels (m).
     C_values : array-like
         Stress-optic coefficients for R, G, B channels (1/Pa).
-    n : float
-        Refractive index or effective path factor (use 1.0 for solid samples).
+    nu : float
+        Solid fraction (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
     S_i_hat : array-like
@@ -280,13 +299,6 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial
         Recovered stress tensor components [sigma_xx, sigma_yy, sigma_xy].
     success : bool
         Whether optimization was successful.
-
-    Notes
-    -----
-    The multi-wavelength approach (3 wavelengths providing 6 measurements) enables
-    recovery of the full 2D stress tensor (3 components), not just the principal
-    stress difference. The different wavelengths provide different retardances for
-    the same stress state, creating an over-determined system.
     """
     if initial_guess is None:
         initial_guess = np.array([0.0, 0.0, 0.0])
@@ -296,7 +308,7 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial
     result = minimize(
         compute_residual,
         initial_guess,
-        args=(S_m_hat, wavelengths, C_values, n, L, S_i_hat),
+        args=(S_m_hat, wavelengths, C_values, nu, L, S_i_hat),
         method="Nelder-Mead",
         options={"xatol": 1e3, "fatol": 1e-10, "maxiter": 10000},
     )
@@ -304,9 +316,9 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, n, L, S_i_hat, initial
     return result.x, result.success
 
 
-def compute_porosity(S0, S_ref, mu, L):
+def compute_solid_fraction(S0, S_ref, mu, L):
     """
-    Compute porosity from intensity using Beer-Lambert law.
+    Compute solid fraction from intensity using Beer-Lambert law.
 
     Parameters
     ----------
@@ -321,21 +333,21 @@ def compute_porosity(S0, S_ref, mu, L):
 
     Returns
     -------
-    n : array-like
-        Porosity values.
+    nu : array-like
+        Solid fraction values.
     """
-    # Beer-Lambert: S0 = S_ref * exp(-mu * n * L)
-    # Solving for n: n = -ln(S0 / S_ref) / (mu * L)
+    # Beer-Lambert: S0 = S_ref * exp(-mu * nu * L)
+    # Solving for nu: nu = -ln(S0 / S_ref) / (mu * L)
     S0_safe = np.maximum(S0, 1e-10)
-    n = -np.log(S0_safe / S_ref) / (mu * L)
-    return n
+    nu = -np.log(S0_safe / S_ref) / (mu * L)
+    return nu
 
 
 def recover_stress_map(
     image_stack,
     wavelengths,
     C_values,
-    n,
+    nu,
     L,
     S_i_hat,
     progress_callback=None,

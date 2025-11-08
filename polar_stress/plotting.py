@@ -271,7 +271,9 @@ def virino():
         The virino colormap
     """
 
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("virino", _virino_list)
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
+        "virino", _virino_list
+    )
     return cmap
 
 

@@ -97,7 +97,9 @@ def fit_retardation_pixel(dolp_values, wavelengths, thickness, C):
     return res.x if res.success else np.nan
 
 
-def recover_retardation_map(image_stack, wavelengths, thickness, C, polarization_efficiency):
+def recover_retardation_map(
+    image_stack, wavelengths, thickness, C, polarization_efficiency
+):
     """
     image_stack: numpy array of shape [H, W, 3, 4] (RGB, 4 polarizer angles)
     wavelengths: list or array of shape [3] in meters (R, G, B)
@@ -114,11 +116,15 @@ def recover_retardation_map(image_stack, wavelengths, thickness, C, polarization
                 if np.isnan(I).any():
                     dolps.append(np.nan)
                     continue
-                S0, S1, S2 = compute_stokes(I, efficiency=polarization_efficiency)
+                S0, S1, S2 = compute_stokes(
+                    I, efficiency=polarization_efficiency
+                )
                 dolp = compute_DoLP(S0, S1, S2)
                 dolps.append(dolp)
                 dolps.append(dolp)
-            retardation_map[y, x] = fit_retardation_pixel(dolps, wavelengths, thickness, C)
+            retardation_map[y, x] = fit_retardation_pixel(
+                dolps, wavelengths, thickness, C
+            )
 
     return retardation_map
 
@@ -131,16 +137,26 @@ if __name__ == "__main__":
     C = params["C"]  # stress-optic coefficient (Pa^-1)
     thickness = params["thickness"]  # thickness in m
     wavelengths_nm = np.array(params["wavelengths"])  # wavelengths in nm
-    polarization_efficiency = params["polarization_efficiency"]  # polarization efficiency (0-1)
+    polarization_efficiency = params[
+        "polarization_efficiency"
+    ]  # polarization efficiency (0-1)
 
     fig = plt.figure(figsize=(6, 4), layout="constrained")
 
     for noise_level in [0, 1e-3, 1e-2]:
-        noisy_image_stack = image_stack * (1 + noise_level * (np.random.randn(*image_stack.shape) - 0.5))
-        noisy_image_stack = np.clip(noisy_image_stack, 0, None)  # Ensure no negative values
+        noisy_image_stack = image_stack * (
+            1 + noise_level * (np.random.randn(*image_stack.shape) - 0.5)
+        )
+        noisy_image_stack = np.clip(
+            noisy_image_stack, 0, None
+        )  # Ensure no negative values
 
         ret_map = recover_retardation_map(
-            noisy_image_stack, wavelengths_nm, thickness, C, polarization_efficiency
+            noisy_image_stack,
+            wavelengths_nm,
+            thickness,
+            C,
+            polarization_efficiency,
         )
 
         plt.clf()
