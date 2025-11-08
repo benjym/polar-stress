@@ -100,9 +100,7 @@ def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength):
     The retardance formula is: δ = (2πCnL/λ) * √[(σ_xx - σ_yy)² + 4σ_xy²]
     where the principal stress difference determines the birefringence magnitude.
     """
-    principal_stress_diff = np.sqrt(
-        (sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2
-    )
+    principal_stress_diff = np.sqrt((sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2)
     delta = (2 * np.pi * C * nu * L / wavelength) * principal_stress_diff
     return delta
 
@@ -178,9 +176,7 @@ def mueller_matrix(theta, delta):
     return M
 
 
-def predict_stokes(
-    sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat
-):
+def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat):
     """
     Predict normalized Stokes vector components from stress tensor.
 
@@ -209,9 +205,7 @@ def predict_stokes(
         Predicted normalized Stokes components [S1_hat, S2_hat].
     """
     theta = compute_principal_angle(sigma_xx, sigma_yy, sigma_xy)
-    delta = compute_retardance(
-        sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength
-    )
+    delta = compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength)
 
     M = mueller_matrix(theta, delta)
 
@@ -227,9 +221,7 @@ def predict_stokes(
     return S_p_hat
 
 
-def compute_residual(
-    stress_params, S_m_hat, wavelengths, C_values, nu, L, S_i_hat
-):
+def compute_residual(stress_params, S_m_hat, wavelengths, C_values, nu, L, S_i_hat):
     """
     Compute residual between measured and predicted Stokes components.
 
@@ -275,9 +267,7 @@ def compute_residual(
     return residual
 
 
-def recover_stress_tensor(
-    S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initial_guess=None
-):
+def recover_stress_tensor(S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initial_guess=None):
     """
     Recover stress tensor components by minimizing residual.
 

@@ -27,6 +27,10 @@ dependencies = [
     "pre-commit"
 ]
 
+[project.scripts]
+image-to-stress = "photoelastimetry.main:cli_image_to_stress"
+stress-to-image = "photoelastimetry.main:cli_stress_to_image"
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"

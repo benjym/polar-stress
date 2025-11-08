@@ -3,7 +3,7 @@ import numpy as np
 import json
 from tqdm import tqdm
 from glob import glob
-import polar_stress.image as image
+import photoelastimetry.image as image
 
 
 def read_raw(filename, metadata):
@@ -36,9 +36,7 @@ def read_raw(filename, metadata):
 def load_raw(foldername):
     json_file = foldername + "/recordingMetadata.json"
     if not os.path.exists(json_file):
-        raise ValueError(
-            f"Metadata file {json_file} does not exist. Please check the folder name."
-        )
+        raise ValueError(f"Metadata file {json_file} does not exist. Please check the folder name.")
 
     frame_folder = foldername + "/0000000/"
     all_frames = glob(frame_folder + "frame*.raw")
@@ -99,8 +97,8 @@ def split_channels(data):
     data = np.stack(
         (
             I0,
-            I90,
             I45,
+            I90,
             I135,
         ),
         axis=-1,
@@ -108,38 +106,130 @@ def split_channels(data):
     return data
 
 
-if __name__ == "__main__":
-    import sys
-    import matplotlib.pyplot as plt
+def save_image(filename, data, metadata):
+    """
+    Save image data to a file in various formats.
 
-    # Example usage
-    foldername = sys.argv[1]
-    data, metadata = load_raw(foldername)
+    This function saves image data to disk in one of several supported formats,
+    automatically determining the format from the file extension.
 
-    AoLP = 2 * image.AoLP(data) + np.pi  # put in range [0, 2pi]
-    DoLP = image.DoLP(data)
+    Parameters
+    ----------
+    filename : str
+        Path to the output file. The file extension determines the format.
+        Supported extensions: .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif
+    data : numpy.ndarray
+        Image data to save. The data will be cast to the appropriate dtype
+        based on the file format (uint8 for .png/.jpg, uint16 for .tiff, etc.)
+    metadata : dict
+        Dictionary containing metadata about the image. For .raw format, must
+        contain a "dtype" key specifying the data type to use when saving.
 
-    # plt.imshow(AoLP, cmap="hsv")
-    # plt.colorbar()
-    # plt.title("Angle of Linear Polarisation (AoLP)")
-    # plt.show()
+    Raises
+    ------
+    ValueError
+        If the file extension is not one of the supported formats.
 
-    # import tifffile
+    Notes
+    -----
+    - .npy files preserve the original data type and shape
+    - .raw files are saved as binary with dtype specified in metadata
+    - .png and .jpg files convert data to uint8
+    - .tiff/.tif files convert data to uint16
+    - matplotlib is used for .png and .jpg formats
+    - tifffile library is used for .tiff/.tif formats
 
-    # for i, colour in enumerate(["R", "G1", "G2", "B"]):
-    #     tifffile.imwrite(f"AoLP_{colour}.tiff", AoLP[..., i], metadata={"axes": "YX", "unit": "radians"})
+    Examples
+    --------
+    >>> data = np.random.randint(0, 255, (100, 100), dtype=np.uint8)
+    >>> metadata = {"dtype": "uint8"}
+    >>> save_image("output.png", data, metadata)
+    """
+    if filename.endswith(".npy"):
+        np.save(filename, data)
+    elif filename.endswith(".raw"):
+        with open(filename, "wb") as f:
+            data.astype(metadata["dtype"]).tofile(f)
+    elif filename.endswith(".png"):
+        import matplotlib.pyplot as plt
 
-    # write a raw binary file - single precision float
-    for i, colour in enumerate(["R", "G1", "G2", "B"]):
-        plt.imsave(
-            f"DoLP_{colour}.png", DoLP[..., i], cmap="gray", vmin=0, vmax=1
+        plt.imsave(filename, data.astype(np.uint8))
+    elif filename.endswith(".jpg") or filename.endswith(".jpeg"):
+        import matplotlib.pyplot as plt
+
+        plt.imsave(filename, data.astype(np.uint8))
+    elif filename.endswith(".tiff") or filename.endswith(".tif"):
+        import tifffile
+
+        tifffile.imwrite(filename, data.astype(np.uint16))
+    else:
+        raise ValueError(
+            f"Unsupported file format for {filename}. Supported formats are .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif"
         )
-        plt.imsave(
-            f"AoLP_{colour}.png",
-            AoLP[..., i],
-            cmap="gray",
-            vmin=0,
-            vmax=2 * np.pi,
+
+
+def load_image(filename, metadata=None):
+    """
+    Load image data from a file in various formats.
+
+    This function loads image data from disk in one of several supported formats,
+    automatically determining the format from the file extension.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the input file. The file extension determines the format.
+        Supported extensions: .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif
+    metadata : dict, optional
+        Dictionary containing metadata about the image. For .raw format, must
+        contain "width", "height", and "dtype" keys specifying the image dimensions
+        and data type. Default is None.
+
+    Returns
+    -------
+    numpy.ndarray
+        Loaded image data.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is not one of the supported formats.
+
+    Notes
+    -----
+    - .npy files preserve the original data type and shape
+    - .raw files are read as binary with dtype and shape specified in metadata
+    - .png and .jpg files are loaded as uint8 arrays
+    - .tiff/.tif files are loaded as uint16 arrays
+    - matplotlib is used for .png and .jpg formats
+    - tifffile library is used for .tiff/.tif formats
+
+    Examples
+    --------
+    >>> metadata = {"width": 100, "height": 100, "dtype": "uint8"}
+    >>> data = load_image("input.raw", metadata)
+    """
+    if filename.endswith(".npy"):
+        data = np.load(filename)
+    elif filename.endswith(".raw"):
+        with open(filename, "rb") as f:
+            data = np.memmap(
+                f,
+                dtype=metadata["dtype"],
+                mode="r",
+                offset=0,
+                shape=(metadata["height"], metadata["width"]),
+            )
+            data = np.array(data)
+    elif filename.endswith(".png") or filename.endswith(".jpg") or filename.endswith(".jpeg"):
+        import matplotlib.pyplot as plt
+
+        data = plt.imread(filename)
+    elif filename.endswith(".tiff") or filename.endswith(".tif"):
+        import tifffile
+
+        data = tifffile.imread(filename)
+    else:
+        raise ValueError(
+            f"Unsupported file format for {filename}. Supported formats are .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif"
         )
-        with open(f"AoLP_{colour}.raw", "wb") as f:
-            f.write(AoLP[..., i].astype(np.float32).tobytes())
