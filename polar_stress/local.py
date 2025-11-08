@@ -1,3 +1,11 @@
+"""
+Local stress measurement using polarimetric imaging.
+
+This module implements the local stress measurement algorithm using Mueller
+matrix calculus and multi-wavelength polarimetry to recover the full 2D stress
+tensor at each pixel from polarimetric images.
+"""
+
 import numpy as np
 from scipy.optimize import minimize
 
