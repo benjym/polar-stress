@@ -4,6 +4,6 @@
     C : [2e-12,2e-12,2e-12], // stress-optic coefficient for each wavelength (1/Pa)
     thickness : 0.01, // thickness of sample in m
     polarization_efficiency : 0.95,
-    folderName : "images/02002060_diskSaving1",
+    folderName : "images/2025_05_06/2025_05_06_11_51_53_010/02002060_diskSaving1",
     debug: false
 }

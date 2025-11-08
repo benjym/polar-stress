@@ -8,7 +8,7 @@ import photoelastimetry.local
 import photoelastimetry.io
 
 
-def image_to_stress(params, output_filename=None, polariser_angle_deg=0.0):
+def image_to_stress(params, output_filename=None):
     """
     Convert photoelastic images to stress maps.
 
@@ -23,10 +23,10 @@ def image_to_stress(params, output_filename=None, polariser_angle_deg=0.0):
             - C (float): Stress-optic coefficient in 1/Pa
             - thickness (float): Sample thickness in meters
             - wavelengths (list): List of wavelengths in nanometers
+            - polariser_angle (float, optional): Polariser angle in degrees relative to the 0 degree camera axis.
+              Defaults to 0.0.
         output_filename (str, optional): Path to save the output stress map image.
             If None, the stress map is not saved. Defaults to None.
-        polariser_angle_deg (float, optional): Polariser angle in degrees relative to the 0 degree camera axis.
-            Defaults to 0.0.
 
     Returns:
         numpy.ndarray: 2D array representing the stress map in Pascals.
@@ -65,6 +65,7 @@ def image_to_stress(params, output_filename=None, polariser_angle_deg=0.0):
             C,
         ]  # Stress-optic coefficients in 1/Pa
 
+    polariser_angle_deg = params.get("polariser_angle", 0.0)
     polariser_angle_rad = np.deg2rad(polariser_angle_deg)
     # Assume light fully polarised in polariser direction
     S_I_HAT = np.array([np.cos(polariser_angle_rad), np.sin(polariser_angle_rad)])
@@ -171,16 +172,10 @@ def cli_image_to_stress():
         default=None,
         help="Path to save the output stress map image (optional).",
     )
-    parser.add_argument(
-        "--polariser-angle",
-        type=float,
-        default=0.0,
-        help="Polariser angle in degrees (default: 0.0).",
-    )
     args = parser.parse_args()
 
     params = json5.load(open(args.json_filename, "r"))
-    image_to_stress(params, output_filename=args.output, polariser_angle_deg=args.polariser_angle)
+    image_to_stress(params, output_filename=args.output)
 
 
 def cli_stress_to_image():
@@ -253,7 +248,7 @@ def demosaic_raw_image(input_file, metadata, output_prefix=None, output_format="
         tifffile.imwrite(
             output_file, demosaiced_transposed.astype(np.uint16), imagej=True, metadata={"axes": "TCYX"}
         )
-        print(f"Saved TIFF stack to {output_file} (4 polarization angles × 3 color channels)")
+        # print(f"Saved TIFF stack to {output_file} (4 polarization angles × 3 color channels)")
     elif output_format.lower() == "png":
         import matplotlib.pyplot as plt
 
@@ -266,7 +261,7 @@ def demosaic_raw_image(input_file, metadata, output_prefix=None, output_format="
             img = demosaiced[:, :, :, i] / 4096
 
             plt.imsave(output_file, img)
-            print(f"Saved {angle} polarization to {output_file}")
+            # print(f"Saved {angle} polarization to {output_file}")
     else:
         raise ValueError(f"Unsupported output format: {output_format}. Use 'tiff' or 'png'.")
 
@@ -279,19 +274,19 @@ def cli_demosaic():
     parser.add_argument(
         "input_file",
         type=str,
-        help="Path to the raw image file.",
+        help="Path to the raw image file or directory (with --all flag).",
     )
     parser.add_argument(
         "--width",
         type=int,
-        required=True,
-        help="Image width in pixels.",
+        default=4096,
+        help="Image width in pixels (default: 4096).",
     )
     parser.add_argument(
         "--height",
         type=int,
-        required=True,
-        help="Image height in pixels.",
+        default=3000,
+        help="Image height in pixels (default: 3000).",
     )
     parser.add_argument(
         "--dtype",
@@ -313,6 +308,11 @@ def cli_demosaic():
         choices=["tiff", "png"],
         help="Output format: 'tiff' for single stack, 'png' for 4 separate images (default: tiff).",
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Recursively process all .raw files in the input directory and subdirectories.",
+    )
     args = parser.parse_args()
 
     metadata = {
@@ -322,4 +322,31 @@ def cli_demosaic():
     if args.dtype:
         metadata["dtype"] = args.dtype
 
-    demosaic_raw_image(args.input_file, metadata, args.output_prefix, args.format)
+    if args.all:
+        # Process all raw files recursively
+        if not os.path.isdir(args.input_file):
+            raise ValueError(f"When using --all flag, input_file must be a directory. Got: {args.input_file}")
+
+        # Find all .raw files recursively
+        from glob import glob
+
+        raw_files = glob(os.path.join(args.input_file, "**", "*.raw"), recursive=True)
+
+        if len(raw_files) == 0:
+            print(f"No .raw files found in {args.input_file}")
+            return
+
+        print(f"Found {len(raw_files)} .raw files to process")
+
+        # Process each file
+        from tqdm import tqdm
+
+        for raw_file in tqdm(raw_files, desc="Processing raw files"):
+            try:
+                demosaic_raw_image(raw_file, metadata, args.output_prefix, args.format)
+            except Exception as e:
+                print(f"Error processing {raw_file}: {e}")
+                continue
+    else:
+        # Process single file
+        demosaic_raw_image(args.input_file, metadata, args.output_prefix, args.format)
