@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm, LogNorm
 from tqdm import tqdm
-
+import tifffile
 from plotting import virino
 
 virino_cmap = virino()
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     ]  # Polarization efficiency (0-1)
 
     # Grid in polar coordinates
-    n = 200
+    n = 20
     x = np.linspace(-R, R, n)
     y = np.linspace(-R, R, n)
     X, Y = np.meshgrid(x, y)
@@ -524,6 +524,7 @@ if __name__ == "__main__":
 
     # Save the output data
     np.save("brazil_test_simulation.npy", synthetic_images)
+    tifffile.imwrite("brazil_test_simulation.tiff", synthetic_images)
 
     fig = plt.figure(figsize=(6, 4), layout="constrained")
     plt.imshow(principal_diff, norm=LogNorm())
