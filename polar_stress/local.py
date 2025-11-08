@@ -124,6 +124,12 @@ def compute_principal_angle(sigma_xx, sigma_yy, sigma_xy):
     -------
     theta : float or array-like
         Principal stress orientation angle (radians).
+
+    Notes
+    -----
+    In photoelasticity, the fast axis aligns with the maximum compressive
+    stress direction. This formula gives the angle to the maximum tensile
+    stress (σ_max).
     """
     theta = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)
     return theta

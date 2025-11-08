@@ -1,5 +1,5 @@
 [project]
-name = "polar-stress"
+name = "photoelastimetry"
 version = "0.2"
 requires-python = ">=3.9"
 authors = [
@@ -9,7 +9,7 @@ authors = [
 description = "Package for processing polarised images to measure stress in granular media"
 readme = "README.md"
 license = "GPL-3.0-or-later"
-keywords = ["granular", "photoelasticity", "stress"]
+keywords = ["granular", "polarimetry","photoelasticity", "stress"]
 dependencies = [
     "numpy",
     "matplotlib",
@@ -32,8 +32,8 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.black]
-line-length = 78
+line-length = 110
 target-version = ['py311']
 
 [tool.setuptools]
-packages = ["polar_stress"]
+packages = ["photoelastimetry"]
