@@ -1,18 +1,10 @@
-# photoelastimetry
+# User Guide
 
-Package for processing polarised images to measure stress in granular media
+## Overview
 
-## Installation
+Photoelastimetry is a package for processing polarised images to measure stress in granular media using photoelastic techniques. This guide covers the main workflows and configuration options.
 
-To install the package, run the following command in the terminal:
-
-```bash
-pip install photoelastimetry
-```
-
-## Usage
-
-After installation, two command line scripts are available:
+## Command Line Tools
 
 ### image-to-stress
 
@@ -33,6 +25,8 @@ image-to-stress <json_filename> [--output OUTPUT]
 image-to-stress params.json5 --output stress_map.png
 ```
 
+**JSON5 Parameters:**
+
 The JSON5 parameter file should contain:
 
 - `folderName`: Path to folder containing raw photoelastic images
@@ -43,9 +37,23 @@ The JSON5 parameter file should contain:
 - `crop` (optional): Crop region as [y1, y2, x1, x2]
 - `debug` (optional): If true, display all channels for debugging
 
+**Example parameter file:**
+
+```json
+{
+  "folderName": "./images/experiment1",
+  "C": 5e-11,
+  "thickness": 0.005,
+  "wavelengths": [450, 550, 650],
+  "polariser_angle": 0.0,
+  "crop": [100, 900, 100, 900],
+  "debug": false
+}
+```
+
 ### stress-to-image
 
-Converts stress field data to photoelastic fringe pattern images.
+Converts stress field data to photoelastic fringe pattern images. This is useful for validating stress field calculations or generating synthetic training data.
 
 ```bash
 stress-to-image <json_filename>
@@ -60,6 +68,8 @@ stress-to-image <json_filename>
 ```bash
 stress-to-image params.json5
 ```
+
+**JSON5 Parameters:**
 
 The JSON5 parameter file should contain:
 
@@ -76,7 +86,7 @@ The JSON5 parameter file should contain:
 De-mosaics a raw polarimetric image from a camera with a 4x4 superpixel pattern into separate colour and polarisation channels.
 
 ```bash
-demosaic-raw <input_file> [--width WIDTH] [--height HEIGHT] [--dtype DTYPE] [--output-prefix PREFIX] [--format FORMAT] [--all]
+demosaic-raw <input_file> [OPTIONS]
 ```
 
 **Arguments:**
@@ -107,17 +117,55 @@ demosaic-raw images/ --format png --all
 - `tiff`: Creates a single TIFF file with shape [H/4, W/4, 4, 4] containing all colour channels (R, G1, G2, B) and polarisation angles (0°, 45°, 90°, 135°)
 - `png`: Creates 4 PNG files (one per polarisation angle), each containing all colour channels as a composite image
 
-## Development
+## Stress Analysis Methods
 
-To set up the development environment, clone the repository and install the package in editable mode:
+The package provides three complementary approaches for stress field recovery:
 
-```bash
-git clone https://github.com/benjym/photoelastimetry.git
-cd photoelastimetry
-pip install -e .
+### Stokes-based Solver
+
+Uses normalized Stokes components for pixel-wise stress inversion. This is the primary method for most applications.
+
+- Best for: Standard photoelastic analysis
+- Module: `photoelastimetry.solver.stokes_solver`
+
+### Intensity-based Solver
+
+Works directly with raw polarization intensities for pixel-wise inversion.
+
+- Best for: When raw intensities are more reliable than Stokes parameters
+- Module: `photoelastimetry.solver.intensity_solver`
+
+### Equilibrium Solver
+
+Global inversion that enforces mechanical equilibrium constraints using an Airy stress function.
+
+- Best for: Cases where mechanical equilibrium is important
+- Module: `photoelastimetry.solver.equilibrium_solver`
+
+## Photoelastic Theory
+
+### Stress-Optic Law
+
+The fundamental relationship between stress and optical retardation:
+
+```
+δ = C · t · (σ₁ - σ₂)
 ```
 
-## Authors
+Where:
+- δ is the optical retardation
+- C is the stress-optic coefficient
+- t is the specimen thickness
+- σ₁, σ₂ are the principal stresses
 
-- [Benjy Marks](mailto:benjy.marks@sydney.edu.au)
-- [Qianyu Fang](mailto:qianyu.fang@sydney.edu.au)
+### Mueller Matrix Formalism
+
+The package uses Mueller matrix calculus to model light propagation through the photoelastic sample and optical elements.
+
+## Tips and Best Practices
+
+1. **Calibration**: Always calibrate the stress-optic coefficient (C) for your specific material
+2. **Image Quality**: Use high-quality, well-exposed images with minimal noise
+3. **Wavelength Selection**: Multiple wavelengths improve stress field resolution
+4. **Cropping**: Crop images to regions of interest to reduce computation time
+5. **Validation**: Compare results from different solver methods when possible

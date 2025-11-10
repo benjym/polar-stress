@@ -1,10 +1,54 @@
 site_name: Photoelastimetry
+site_description: Package for processing polarised images to measure stress in granular media
+site_author: Benjy Marks, Qianyu Fang
+site_url: https://benjym.github.io/photoelastimetry/
+
+repo_name: benjym/photoelastimetry
+repo_url: https://github.com/benjym/photoelastimetry
 
 theme:
   name: "material"
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
 
 plugins:
-  - mkdocstrings
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            group_by_category: true
+            show_category_heading: true
+            show_if_no_docstring: false
+            inherited_members: false
+            filters:
+              - "!^_"
   - include-markdown
 
 markdown_extensions:
@@ -13,7 +57,35 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
   - markdown_include.include:
         base_path: json
+
 nav:
-  - index.md
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide: user-guide.md
+  - Examples: examples.md
+  - API Reference:
+      - Overview: reference/index.md
+      - Core Modules:
+          - disk: reference/disk.md
+          - image: reference/image.md
+          - io: reference/io.md
+          - main: reference/main.md
+          - plotting: reference/plotting.md
+      - Solver Modules:
+          - solver: reference/solver.md
+          - stokes_solver: reference/stokes_solver.md
+          - intensity_solver: reference/intensity_solver.md
+          - equilibrium_solver: reference/equilibrium_solver.md
+  - Contributing: contributing.md
