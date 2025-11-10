@@ -313,7 +313,14 @@ def show_all_channels(data, metadata, filename=None):
         data = data.astype("float32") / 65535.0
 
     plt.figure(figsize=(12, 12), layout="constrained")
-    for i, colour in enumerate(["R", "G1", "G2", "B"]):
+    # work with both RGB and RGGB
+    ncolour_channels = data.shape[2]
+    if ncolour_channels == 3:
+        colours = ["R", "G", "B"]
+    else:
+        colours = ["R", "G1", "G2", "B"]
+
+    for i, colour in enumerate(colours):
         for j, polarisation in enumerate(["0", "90", "45", "135"]):
             plt.subplot(4, 4, i * 4 + j + 1)
             plt.title(f"{colour}_{polarisation}")

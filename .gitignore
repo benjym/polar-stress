@@ -4,5 +4,5 @@ venv/
 *.pyo
 *.egg-info
 site/
-inversion_method_validation.png
-inversion_method_validation.pdf
+.cache/
+*.pkl

@@ -107,7 +107,7 @@ def split_channels(data):
     return data
 
 
-def save_image(filename, data, metadata):
+def save_image(filename, data, metadata={}):
     """
     Save image data to a file in various formats.
 
@@ -124,7 +124,7 @@ def save_image(filename, data, metadata):
         based on the file format (uint8 for .png/.jpg, uint16 for .tiff, etc.)
     metadata : dict
         Dictionary containing metadata about the image. For .raw format, must
-        contain a "dtype" key specifying the data type to use when saving.
+        contain a "dtype" key specifying the data type to use when saving. Default is empty.
 
     Raises
     ------
@@ -162,7 +162,15 @@ def save_image(filename, data, metadata):
     elif filename.endswith(".tiff") or filename.endswith(".tif"):
         import tifffile
 
-        tifffile.imwrite(filename, data.astype(np.uint16))
+        if data.ndim == 2:
+            tifffile.imwrite(filename, data.astype("<f4"))
+        elif data.ndim == 3:
+            transposed = np.transpose(data, (2, 0, 1))
+            tifffile.imwrite(filename, transposed.astype("<f4"), imagej=True, metadata={"axes": "CYX"})
+        elif data.ndim == 4:
+            # Permute to [4, 3, H, W] so TIFF is interpreted as 4 timepoints of 3-channel images
+            transposed = np.transpose(data, (3, 2, 0, 1))
+            tifffile.imwrite(filename, transposed.astype("<f4"), imagej=True, metadata={"axes": "TCYX"})
     else:
         raise ValueError(
             f"Unsupported file format for {filename}. Supported formats are .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif"
@@ -230,10 +238,25 @@ def load_image(filename, metadata=None):
         import tifffile
 
         data = tifffile.imread(filename)
+
+        # transpose data to XYC or XYCP format
+        if data.ndim == 3:
+            data = np.transpose(data, (1, 2, 0))
+        elif data.ndim == 4:
+            data = np.transpose(data, (2, 3, 1, 0))
+
     else:
         raise ValueError(
             f"Unsupported file format for {filename}. Supported formats are .npy, .raw, .png, .jpg, .jpeg, .tiff, .tif"
         )
+
+    if metadata is None:
+        metadata = {}
+        metadata["dtype"] = str(data.dtype)
+        metadata["height"] = data.shape[0]
+        metadata["width"] = data.shape[1]
+
+    return data, metadata
 
 
 def bin_image(data, binning):

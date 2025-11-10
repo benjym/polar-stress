@@ -9,6 +9,11 @@ tensor at each pixel from polarimetric images.
 import numpy as np
 from scipy.optimize import minimize
 from tqdm import tqdm
+from photoelastimetry.image import (
+    compute_retardance,
+    compute_principal_angle,
+    mueller_matrix,
+)
 
 
 def compute_stokes_components(I_0, I_45, I_90, I_135):
@@ -65,115 +70,6 @@ def compute_normalized_stokes(S0, S1, S2):
     S1_hat = S1 / S0_safe
     S2_hat = S2 / S0_safe
     return S1_hat, S2_hat
-
-
-def compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength):
-    """
-    Compute retardance for a given stress tensor and material properties.
-
-    Parameters
-    ----------
-    sigma_xx : float or array-like
-        Normal stress component in x direction (Pa).
-    sigma_yy : float or array-like
-        Normal stress component in y direction (Pa).
-    sigma_xy : float or array-like
-        Shear stress component (Pa).
-    C : float
-        Stress-optic coefficient for the colour channel (1/Pa).
-    nu : float
-        Solid fraction (dimensionless).
-        For solid samples, use nu=1.0. For porous samples, this represents
-        the effective optical path length factor relative to sample thickness.
-    L : float
-        Sample thickness (m).
-    wavelength : float
-        Wavelength of light (m).
-
-    Returns
-    -------
-    delta : float or array-like
-        Retardance (radians).
-
-    Notes
-    -----
-    The retardance formula is: δ = (2πCnL/λ) * √[(σ_xx - σ_yy)² + 4σ_xy²]
-    where the principal stress difference determines the birefringence magnitude.
-    """
-    principal_stress_diff = np.sqrt((sigma_xx - sigma_yy) ** 2 + 4 * sigma_xy**2)
-    delta = (2 * np.pi * C * nu * L / wavelength) * principal_stress_diff
-    return delta
-
-
-def compute_principal_angle(sigma_xx, sigma_yy, sigma_xy):
-    """
-    Compute the orientation angle of the principal stress direction.
-
-    Parameters
-    ----------
-    sigma_xx : float or array-like
-        Normal stress component in x direction (Pa).
-    sigma_yy : float or array-like
-        Normal stress component in y direction (Pa).
-    sigma_xy : float or array-like
-        Shear stress component (Pa).
-
-    Returns
-    -------
-    theta : float or array-like
-        Principal stress orientation angle (radians).
-
-    Notes
-    -----
-    In photoelasticity, the fast axis aligns with the maximum compressive
-    stress direction. This formula gives the angle to the maximum tensile
-    stress (σ_max).
-    """
-    theta = 0.5 * np.arctan2(2 * sigma_xy, sigma_xx - sigma_yy)
-    return theta
-
-
-def mueller_matrix(theta, delta):
-    """
-    Compute the Mueller matrix for a birefringent material.
-
-    Parameters
-    ----------
-    theta : float or array-like
-        Orientation angle of principal stress direction (radians).
-    delta : float or array-like
-        Retardance (radians).
-
-    Returns
-    -------
-    M : ndarray
-        Mueller matrix (4x4).
-    """
-    cos_2theta = np.cos(2 * theta)
-    sin_2theta = np.sin(2 * theta)
-    cos_delta = np.cos(delta)
-    sin_delta = np.sin(delta)
-
-    M = np.array(
-        [
-            [1, 0, 0, 0],
-            [
-                0,
-                cos_2theta**2 + sin_2theta**2 * cos_delta,
-                cos_2theta * sin_2theta * (1 - cos_delta),
-                sin_2theta * sin_delta,
-            ],
-            [
-                0,
-                cos_2theta * sin_2theta * (1 - cos_delta),
-                cos_2theta**2 * cos_delta + sin_2theta**2,
-                -cos_2theta * sin_delta,
-            ],
-            [0, -sin_2theta * sin_delta, cos_2theta * sin_delta, cos_delta],
-        ]
-    )
-
-    return M
 
 
 def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat):
@@ -298,7 +194,7 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initia
         Whether optimization was successful.
     """
     if initial_guess is None:
-        initial_guess = np.array([1.0, 1.0, 1.0])
+        initial_guess = np.array([1.0, 1.0, 0.0])
 
     # Use Nelder-Mead for robustness - it doesn't require gradients
     # and is more reliable for this type of inverse problem
@@ -307,7 +203,7 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initia
         initial_guess,
         args=(S_m_hat, wavelengths, C_values, nu, L, S_i_hat),
         method="Nelder-Mead",
-        # options={"xatol": 1e3, "fatol": 1e-10, "maxiter": 10000},
+        options={"xatol": 1e-5, "fatol": 1e-5, "maxiter": 1000},
     )
 
     return result.x, result.success
@@ -385,11 +281,12 @@ def recover_stress_map(
     C_values,
     nu,
     L,
-    S_i_hat,
+    S_i_hat=None,
+    polarizer_angle=0.0,
     n_jobs=-1,
 ):
     """
-    Recover full 2D stress tensor map from polarimetric image stack.
+    Recover full 2D stress tensor map from polarimetric image stack using Stokes method.
 
     Parameters
     ----------
@@ -407,16 +304,22 @@ def recover_stress_map(
         Can be scalar or array matching image dimensions.
     L : float
         Sample thickness (m).
-    S_i_hat : array-like
+    S_i_hat : array-like, optional
         Incoming normalized Stokes vector [S1_hat, S2_hat].
+        If None, computed from polarizer_angle.
+    polarizer_angle : float, optional
+        Polarizer angle in radians (default: 0.0).
+        Only used if S_i_hat is None.
     n_jobs : int, optional
         Number of parallel jobs. -1 uses all available cores (default: -1).
 
     Returns
     -------
     stress_map : ndarray
-        Array of shape [H, W, 3] containing [sigma_xx, sigma_yy, sigma_xy].
+        Array of shape [H, W, 3] containing [sigma_xx, sigma_yy, sigma_xy] in Pa.
     """
+    if S_i_hat is None:
+        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
     from joblib import Parallel, delayed
 
     H, W, _, _ = image_stack.shape
@@ -438,76 +341,3 @@ def recover_stress_map(
         stress_map[y, x, :] = stress_tensor
 
     return stress_map
-
-
-if __name__ == "__main__":
-    # Generate a synthetic test case with `disk.py`, which generates
-    # brazil_test_simulation.tiff
-    import json5
-    from tifffile import imread
-    import matplotlib.pyplot as plt
-
-    # Load synthetic image
-    image_stack = imread("brazil_test_simulation.tiff")
-    H, W, _, _ = image_stack.shape
-    print(f"Loaded image stack with shape: {image_stack.shape}")
-
-    # Display input image for reference
-    plt.figure(figsize=(10, 5), layout="constrained")
-    for i, angle in enumerate([0, 45, 90, 135]):
-        for j, colour in enumerate(["R", "G", "B"]):
-            plt.subplot(4, 3, i * 3 + j + 1)
-            plt.imshow(image_stack[:, :, j, i], cmap="gray")
-            plt.title(f"Polarizer {angle}° ({colour} channel)")
-    plt.savefig("input_image_stack.png")
-
-    # Material and experimental parameters
-
-    with open("json/params.json5", "r") as f:
-        params = json5.load(f)
-
-    C = params["C"]  # Stress-optic coefficients in 1/Pa
-    L = params["thickness"]  # Thickness in m
-    wavelengths_nm = np.array(params["wavelengths"])  # Wavelengths in nm
-    NU = 1.0  # Solid sample
-    WAVELENGTHS = wavelengths_nm * 1e-9  # Convert to meters
-    C_VALUES = [
-        C,
-        C,
-        C,
-    ]  # Stress-optic coefficients in 1/Pa
-
-    S_I_HAT = np.array([1.0, 0.0])  # Incoming light is fully S1 polarized
-
-    # Calculate solid fraction map
-    # S0_ref = 1.0  # Reference intensity (calibrated)
-    # MU_ABS = 1000.0  # Absorption coefficient (calibrated)
-    # S0_measured = (
-    #     image_stack[:, :, 0, 0] + image_stack[:, :, 0, 2]
-    # )  # R channel total intensity
-    # NU = compute_solid_fraction(S0_measured, S0_ref, MU_ABS, L)
-
-    # plt.figure()
-    # plt.imshow(NU, cmap="viridis")
-    # plt.colourbar(label="Solid Fraction (nu)")
-    # plt.title("Computed Solid Fraction Map")
-    # plt.savefig("solid_fraction_map.png")
-
-    # Calculate stress map from image
-    stress_map = recover_stress_map(
-        image_stack,
-        WAVELENGTHS,
-        C_VALUES,
-        NU,
-        L,
-        S_I_HAT,
-    )
-
-    # Display results
-    plt.figure(figsize=(15, 5), layout="constrained")
-    for i, comp in enumerate(["Sigma_xx", "Sigma_yy", "Sigma_xy"]):
-        plt.subplot(1, 3, i + 1)
-        plt.imshow(stress_map[:, :, i], cmap="plasma")
-        plt.colourbar(label="Stress (Pa)")
-        plt.title(comp)
-    plt.savefig("recovered_stress_map.png")

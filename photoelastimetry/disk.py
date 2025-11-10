@@ -3,80 +3,75 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm, LogNorm
 from tqdm import tqdm
-import tifffile
-from plotting import virino
+from photoelastimetry.plotting import virino
+import photoelastimetry.solver.stokes_solver as local
 
 virino_cmap = virino()
 
 
-def simulate_four_step_polarimetry(retardation, theta_p, I0=1.0, polarisation_efficiency=0.9):
+def simulate_four_step_polarimetry(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat, I0=1.0):
     """
-    Simulate four-step polarimetry for photoelasticity using proper Jones matrices
+    Simulate four-step polarimetry using Mueller matrix formalism.
 
-    Setup: Polarizer -> Birefringent sample -> Analyzer (crossed with polarizer)
-    This is the standard setup for photoelastic stress analysis
+    This is consistent with the approach in local.py and uses proper Mueller matrix
+    calculus to predict intensities from stress tensor.
 
-    Parameters:
-    retardation: optical retardation δ = 2πCt(σ1-σ2)/λ
-    theta_p: principal stress angle (fast axis orientation)
-    I0: incident light intensity
+    Parameters
+    ----------
+    sigma_xx : float or array-like
+        Normal stress component in x direction (Pa).
+    sigma_yy : float or array-like
+        Normal stress component in y direction (Pa).
+    sigma_xy : float or array-like
+        Shear stress component (Pa).
+    C : float
+        Stress-optic coefficient (1/Pa).
+    nu : float
+        Solid fraction (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    wavelength : float
+        Wavelength of light (m).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat].
+    I0 : float
+        Incident light intensity (default: 1.0).
 
-    Returns:
+    Returns
+    -------
     Four intensity images for analyzer angles 0°, 45°, 90°, 135°
     """
+    # Compute retardance and principal angle from stress tensor
+    theta = local.compute_principal_angle(sigma_xx, sigma_yy, sigma_xy)
+    delta = local.compute_retardance(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength)
 
-    # Analyzer angles (relative to fixed polarizer at 0°)
-    analyzer_angles = np.array([0, np.pi / 4, np.pi / 2, 3 * np.pi / 4])
+    # Get Mueller matrix
+    M = local.mueller_matrix(theta, delta)
 
-    intensities = []
+    # Create full incoming Stokes vector
+    S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], 0.0])
 
-    # Add unpolarized background (10-20% typical)
-    I_unpolarized = (1 - polarisation_efficiency) * I0
+    # Apply Mueller matrix to get output Stokes vector
+    if M.ndim == 2:
+        # Single pixel case
+        S_out = M @ S_i_full
+    else:
+        # Array case - need to handle broadcasting
+        S_out = np.einsum("...ij,j->...i", M, S_i_full)
 
-    for alpha in analyzer_angles:
-        I = (
-            I0
-            * polarisation_efficiency
-            * np.sin(retardation / 2) ** 2
-            * (1 + np.cos(4 * theta_p - 2 * alpha))
-            / 2
-        )
+    # Extract S0, S1, S2 from output
+    S0_out = S_out[..., 0] if S_out.ndim > 1 else S_out[0]
+    S1_out = S_out[..., 1] if S_out.ndim > 1 else S_out[1]
+    S2_out = S_out[..., 2] if S_out.ndim > 1 else S_out[2]
 
-        I_total = I + I_unpolarized / 4  # /4 because unpolarized splits equally
+    # Compute intensities for four analyzer angles
+    # I(α) = (S0 + S1*cos(2α) + S2*sin(2α)) / 2
+    I0_pol = I0 * (S0_out + S1_out) / 2  # α = 0°
+    I45_pol = I0 * (S0_out + S2_out) / 2  # α = 45°
+    I90_pol = I0 * (S0_out - S1_out) / 2  # α = 90°
+    I135_pol = I0 * (S0_out - S2_out) / 2  # α = 135°
 
-        intensities.append(I_total)
-
-    return intensities
-
-
-def calculate_stress_from_polarimetry(I0, I45, I90, I135):
-    """
-    Calculate retardation and principal stress angle from four polarimetry images
-    Using proper Stokes parameters for photoelasticity
-    """
-
-    # Normalize intensities to avoid numerical issues
-    # I_total = I0 + I45 + I90 + I135
-    # I_total = np.where(I_total == 0, 1e-10, I_total)  # Avoid division by zero
-
-    # Standard four-step phase shifting polarimetry
-    # For rotating analyzer with fixed polarizer at 0°:
-
-    # The Stokes parameters are:
-    S0 = I0 + I90  # Total intensity (sum of orthogonal components)
-    S1 = I0 - I90  # Linear polarization along 0°-90°
-    S2 = I45 - I135  # Linear polarization along 45°-135°
-
-    # Avoid division by zero
-    # S0 = np.where(S0 == 0, 1e-10, S0)
-
-    # Degree of linear polarization (related to retardation)
-    DoLP = np.sqrt(S1**2 + S2**2) / S0
-
-    # Angle of linear polarization (related to principal stress angle)
-    AoLP = np.mod(0.5 * np.arctan2(S2, S1), np.pi)
-
-    return AoLP, DoLP
+    return I0_pol, I45_pol, I90_pol, I135_pol
 
 
 # Standard Brazil test analytical solution
@@ -159,14 +154,18 @@ def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, 
     principal_diff[~mask] = np.nan
     theta_p[~mask] = np.nan
 
-    synthetic_images = np.empty((n, n, 3, 4))  # RGB, 4 polarizer angles
+    height, width = sigma_xx.shape
+
+    synthetic_images = np.empty((height, width, 3, 4))  # RGB, 4 polarizer angles
+
+    # Use incoming light fully S1 polarized (standard setup)
+    S_i_hat = np.array([1.0, 0.0])
+    nu = 1.0  # Solid sample
 
     for i, lambda_light in tqdm(enumerate(wavelengths_nm)):
-        delta = (2 * np.pi * thickness * C * principal_diff) / (lambda_light * 1e-9)
-
-        # Generate four-step polarimetry images
+        # Generate four-step polarimetry images using Mueller matrix approach
         I0_pol, I45_pol, I90_pol, I135_pol = simulate_four_step_polarimetry(
-            delta, theta_p, polarisation_efficiency
+            sigma_xx, sigma_yy, tau_xy, C[i], nu, thickness, lambda_light, S_i_hat
         )
 
         synthetic_images[:, :, i, 0] = I0_pol
@@ -209,11 +208,23 @@ def post_process_synthetic_data(
     # For isoclinic lines, we need the extinction angle in plane polariscope
     isoclinic_angle = theta_p  # Principal stress angle (can be negative)
 
-    # Generate four-step polarimetry images
-    I0_pol, I45_pol, I90_pol, I135_pol = simulate_four_step_polarimetry(retardation, theta_p)
+    # Generate four-step polarimetry images using Mueller matrix approach
+    # Use incoming light fully S1 polarized (standard setup)
+    S_i_hat = np.array([1.0, 0.0])
+    nu = 1.0  # Solid sample
+    I0_pol, I45_pol, I90_pol, I135_pol = simulate_four_step_polarimetry(
+        sigma_xx, sigma_yy, tau_xy, C, nu, t_sample, lambda_light, S_i_hat
+    )
 
-    # Calculate stress from polarimetry
-    AoLP, DoLP = calculate_stress_from_polarimetry(I0_pol, I45_pol, I90_pol, I135_pol)
+    # Calculate Stokes parameters from polarimetry
+    S0, S1, S2 = local.compute_stokes_components(I0_pol, I45_pol, I90_pol, I135_pol)
+    S1_hat, S2_hat = local.compute_normalized_stokes(S0, S1, S2)
+
+    # Degree of linear polarization
+    DoLP = np.sqrt(S1_hat**2 + S2_hat**2)
+
+    # Angle of linear polarization
+    AoLP = np.mod(0.5 * np.arctan2(S2_hat, S1_hat), np.pi)
 
     # Plot characteristic Brazil test photoelastic patterns
     plt.clf()
@@ -453,24 +464,27 @@ def post_process_synthetic_data(
 
 
 if __name__ == "__main__":
+    import os
+    import photoelastimetry.io
+
     # Load the colormap
     # virino_cmap = virino()
     plt.figure(figsize=(12, 12), layout="constrained")
 
     # Disk and load parameters
     R = 0.01  # Radius of the disk (m)
-    P = 1000.0  # Total load per unit thickness (N/m)
+    P = 2.0  # Total load per unit thickness (N/m)
 
-    with open("json/params.json5", "r") as f:
+    with open("json/test.json5", "r") as f:
         params = json5.load(f)
 
-    C = params["C"]  # Stress-optic coefficient (Pa^-1) - typical for photoelastic materials
     thickness = params["thickness"]  # Thickness in m
-    wavelengths_nm = np.array(params["wavelengths"])  # Wavelengths in nm
+    wavelengths_nm = np.array(params["wavelengths"]) * 1e-9  # Wavelengths in nm
+    C = np.array(params["C"])  # Stress-optic coefficient (Pa^-1) for each wavelength
     polarisation_efficiency = params["polarisation_efficiency"]  # Polarisation efficiency (0-1)
 
     # Grid in polar coordinates
-    n = 20
+    n = 100
     x = np.linspace(-R, R, n)
     y = np.linspace(-R, R, n)
     X, Y = np.meshgrid(x, y)
@@ -491,8 +505,14 @@ if __name__ == "__main__":
     )
 
     # Save the output data
-    np.save("brazil_test_simulation.npy", synthetic_images)
-    tifffile.imwrite("brazil_test_simulation.tiff", synthetic_images)
+    stress = np.stack((sigma_xx, sigma_yy, tau_xy), axis=-1)
+    # remove nans
+    stress = np.nan_to_num(stress, nan=0.0)
+
+    if not os.path.exists("images/test"):
+        os.makedirs("images/test")
+    photoelastimetry.io.save_image("images/test/disk_synthetic_stress.tiff", stress)
+    photoelastimetry.io.save_image("images/test/disk_synthetic_images.tiff", synthetic_images)
 
     fig = plt.figure(figsize=(6, 4), layout="constrained")
     plt.imshow(principal_diff, norm=LogNorm())
@@ -508,7 +528,7 @@ if __name__ == "__main__":
             sigma_yy,
             tau_xy,
             thickness,
-            C,
-            lambda_light * 1e-9,  # Convert nm to m
+            C[i],
+            lambda_light,
             f"brazil_test_post_processed_{P:07.0f}_{i:02d}.png",
         )

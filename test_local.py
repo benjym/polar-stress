@@ -8,7 +8,7 @@ the full stress tensor, not just the principal stress difference.
 
 import numpy as np
 import sys
-from photoelastimetry.local import (
+from photoelastimetry.solver.stokes_solver import (
     compute_stokes_components,
     compute_normalized_stokes,
     compute_retardance,

@@ -4,7 +4,7 @@ import json5
 import numpy as np
 from scipy.ndimage import gaussian_filter
 import photoelastimetry.plotting
-import photoelastimetry.local
+import photoelastimetry.solver.stokes_solver
 import photoelastimetry.io
 
 
@@ -17,6 +17,7 @@ def image_to_stress(params, output_filename=None):
 
     Args:
         params (dict): Configuration dictionary containing:
+            - input_filename (str, optional): Path to input image file. If None, raw images are loaded from folderName.
             - folderName (str): Path to folder containing raw photoelastic images
             - crop (list, optional): Crop region as [x1, x2, y1, y2]
             - debug (bool): If True, display all channels for debugging
@@ -38,7 +39,12 @@ def image_to_stress(params, output_filename=None):
         - Wavelengths are automatically converted from nm to meters
     """
 
-    data, metadata = photoelastimetry.io.load_raw(params["folderName"])
+    if "folderName" in params:
+        data, metadata = photoelastimetry.io.load_raw(params["folderName"])
+    elif "input_filename" in params:
+        data, metadata = photoelastimetry.io.load_image(params["input_filename"])
+    else:
+        raise ValueError("Either 'folderName' or 'input_filename' must be specified in params.")
 
     if params.get("crop") is not None:
         data = data[
@@ -50,8 +56,9 @@ def image_to_stress(params, output_filename=None):
 
     if params["debug"]:
         import matplotlib.pyplot as plt
+        import tifffile
 
-        plt.imsave("debug_before_binning.png", data[:, :, 0, 0])
+        tifffile.imwrite("debug_before_binning.tiff", data[:, :, 0, 0])
 
     if params.get("binning") is not None:
         binning = params["binning"]
@@ -84,7 +91,7 @@ def image_to_stress(params, output_filename=None):
 
     # Calculate stress map from image
     n_jobs = params.get("n_jobs", -1)  # Default to using all cores
-    stress_map = photoelastimetry.local.recover_stress_map(
+    stress_map = photoelastimetry.solver.stokes_solver.recover_stress_map(
         data,
         WAVELENGTHS,
         C_VALUES,

@@ -1,0 +1,831 @@
+"""
+Global stress measurement using Airy stress function.
+
+This module implements a global inversion approach that solves for an Airy stress
+function across the entire domain simultaneously. Unlike the local pixel-by-pixel
+method, this approach:
+
+1. Ensures mechanical equilibrium by construction (through Airy stress function)
+2. Enforces smoothness globally via regularization
+3. Avoids local minima by solving a single global optimization problem
+4. Provides more stable results by incorporating spatial coupling
+
+The Airy stress function φ(x,y) relates to stresses via:
+    σ_xx = ∂²φ/∂y²
+    σ_yy = ∂²φ/∂x²
+    σ_xy = -∂²φ/∂x∂y
+
+These automatically satisfy equilibrium: ∂σ_xx/∂x + ∂σ_xy/∂y = 0 and
+∂σ_xy/∂x + ∂σ_yy/∂y = 0.
+"""
+
+import numpy as np
+from scipy.optimize import minimize
+from scipy.sparse import diags, kron, eye as speye
+from scipy.sparse.linalg import spsolve
+from tqdm import tqdm
+from photoelastimetry.solver import stokes_solver
+
+
+def build_finite_difference_operators(nx, ny, dx=1.0, dy=1.0):
+    """
+    Build sparse finite difference operators for computing derivatives.
+
+    Uses central differences for interior points and forward/backward
+    differences at boundaries.
+
+    Parameters
+    ----------
+    nx : int
+        Number of grid points in x direction.
+    ny : int
+        Number of grid points in y direction.
+    dx : float, optional
+        Grid spacing in x direction (default: 1.0).
+    dy : float, optional
+        Grid spacing in y direction (default: 1.0).
+
+    Returns
+    -------
+    D2x : scipy.sparse matrix
+        Second derivative operator in x direction (∂²/∂x²).
+    D2y : scipy.sparse matrix
+        Second derivative operator in y direction (∂²/∂y²).
+    Dxy : scipy.sparse matrix
+        Mixed derivative operator (∂²/∂x∂y).
+    L : scipy.sparse matrix
+        Laplacian operator (∇²).
+    """
+    from scipy.sparse import diags, kron, eye as speye
+
+    # 1D second derivative operator (central differences)
+    # [1, -2, 1] / dx^2
+    diag_1d = np.array([1.0, -2.0, 1.0])
+    offsets_1d = np.array([-1, 0, 1])
+
+    # Build 1D operators
+    D2_1d_x = diags(diag_1d, offsets_1d, shape=(nx, nx)) / dx**2
+    D2_1d_y = diags(diag_1d, offsets_1d, shape=(ny, ny)) / dy**2
+
+    # 2D operators using Kronecker products
+    # For a field organized as [φ(0,0), φ(1,0), ..., φ(nx-1,0), φ(0,1), ...]
+    I_x = speye(nx)
+    I_y = speye(ny)
+
+    # ∂²/∂x² operator
+    D2x = kron(I_y, D2_1d_x)
+
+    # ∂²/∂y² operator
+    D2y = kron(D2_1d_y, I_x)
+
+    # Mixed derivative ∂²/∂x∂y
+    # First derivative operators
+    diag_d1 = np.array([-0.5, 0.0, 0.5])
+    offsets_d1 = np.array([-1, 0, 1])
+
+    Dx_1d = diags(diag_d1, offsets_d1, shape=(nx, nx)) / dx
+    Dy_1d = diags(diag_d1, offsets_d1, shape=(ny, ny)) / dy
+
+    Dx = kron(I_y, Dx_1d)
+    Dy = kron(Dy_1d, I_x)
+
+    # Mixed derivative: ∂/∂x(∂/∂y)
+    Dxy = Dx @ Dy
+
+    # Laplacian (for regularization)
+    L = D2x + D2y
+
+    return D2x, D2y, Dxy, L
+
+
+def airy_to_stress(phi, D2x, D2y, Dxy):
+    """
+    Convert Airy stress function to stress components.
+
+    Parameters
+    ----------
+    phi : ndarray
+        Airy stress function values on grid (flattened or 2D).
+    D2x : scipy.sparse matrix
+        Second derivative operator in x direction.
+    D2y : scipy.sparse matrix
+        Second derivative operator in y direction.
+    Dxy : scipy.sparse matrix
+        Mixed derivative operator.
+
+    Returns
+    -------
+    sigma_xx : ndarray
+        Normal stress in x direction (same shape as phi).
+    sigma_yy : ndarray
+        Normal stress in y direction (same shape as phi).
+    sigma_xy : ndarray
+        Shear stress (same shape as phi).
+    """
+    phi_flat = phi.flatten()
+
+    # σ_xx = ∂²φ/∂y²
+    sigma_xx = D2y @ phi_flat
+
+    # σ_yy = ∂²φ/∂x²
+    sigma_yy = D2x @ phi_flat
+
+    # σ_xy = -∂²φ/∂x∂y
+    sigma_xy = -Dxy @ phi_flat
+
+    return sigma_xx, sigma_yy, sigma_xy
+
+
+def compute_global_residual(
+    phi,
+    image_stack,
+    wavelengths,
+    C_values,
+    nu,
+    L,
+    S_i_hat,
+    D2x,
+    D2y,
+    Dxy,
+    mask,
+    lambda_smooth=1.0,
+    lambda_biharmonic=0.0,
+):
+    """
+    Compute global residual for Airy stress function optimization.
+
+    This function computes the misfit between measured and predicted Stokes
+    parameters across all pixels and wavelengths, plus regularization terms.
+
+    Parameters
+    ----------
+    phi : ndarray
+        Airy stress function values (flattened).
+    image_stack : ndarray
+        Image stack [H, W, 3, 4] with RGB channels and 4 polarization angles.
+    wavelengths : array-like
+        Wavelengths for RGB channels (m).
+    C_values : array-like
+        Stress-optic coefficients for RGB channels (1/Pa).
+    nu : float or ndarray
+        Solid fraction (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat].
+    D2x, D2y, Dxy : scipy.sparse matrix
+        Finite difference operators.
+    mask : ndarray
+        Boolean mask indicating valid pixels (H, W).
+    lambda_smooth : float, optional
+        Regularization weight for Laplacian smoothing (default: 1.0).
+    lambda_biharmonic : float, optional
+        Regularization weight for biharmonic smoothing (default: 0.0).
+
+    Returns
+    -------
+    residual : float
+        Total residual including data misfit and regularization terms.
+    """
+    H, W, _, _ = image_stack.shape
+
+    # Convert Airy function to stresses
+    sigma_xx, sigma_yy, sigma_xy = airy_to_stress(phi, D2x, D2y, Dxy)
+
+    # Reshape to 2D
+    sigma_xx = sigma_xx.reshape(H, W)
+    sigma_yy = sigma_yy.reshape(H, W)
+    sigma_xy = sigma_xy.reshape(H, W)
+
+    # Data misfit term
+    data_residual = 0.0
+    n_valid = 0
+
+    for i in range(H):
+        for j in range(W):
+            if not mask[i, j]:
+                continue
+
+            # Get measured Stokes components for this pixel
+            S_m_hat = np.zeros((3, 2))
+            valid_pixel = True
+
+            for c in range(3):  # RGB channels
+                I = image_stack[i, j, c, :]
+
+                if np.isnan(I).any():
+                    valid_pixel = False
+                    break
+
+                S0, S1, S2 = stokes_solver.compute_stokes_components(I[0], I[1], I[2], I[3])
+                S1_hat, S2_hat = stokes_solver.compute_normalized_stokes(S0, S1, S2)
+                S_m_hat[c, 0] = S1_hat
+                S_m_hat[c, 1] = S2_hat
+
+            if not valid_pixel:
+                continue
+
+            # Get solid fraction for this pixel
+            nu_pixel = nu if np.isscalar(nu) else nu[i, j]
+
+            # Predict Stokes components from stress
+            for c in range(3):
+                S_p_hat = stokes_solver.predict_stokes(
+                    sigma_xx[i, j],
+                    sigma_yy[i, j],
+                    sigma_xy[i, j],
+                    C_values[c],
+                    nu_pixel,
+                    L,
+                    wavelengths[c],
+                    S_i_hat,
+                )
+                diff = S_m_hat[c] - S_p_hat
+                data_residual += np.sum(diff**2)
+
+            n_valid += 1
+
+    # Normalize by number of valid pixels
+    if n_valid > 0:
+        data_residual /= n_valid
+
+    # Smoothness regularization (Laplacian)
+    smoothness_residual = 0.0
+    if lambda_smooth > 0:
+        # Build Laplacian operator
+        L_op = D2x + D2y
+        lap_phi = L_op @ phi
+        smoothness_residual = lambda_smooth * np.sum(lap_phi**2) / len(phi)
+
+    # Biharmonic regularization (∇⁴φ)
+    biharmonic_residual = 0.0
+    if lambda_biharmonic > 0:
+        L_op = D2x + D2y
+        biharm_phi = L_op @ (L_op @ phi)
+        biharmonic_residual = lambda_biharmonic * np.sum(biharm_phi**2) / len(phi)
+
+    total_residual = data_residual + smoothness_residual + biharmonic_residual
+
+    return total_residual
+
+
+def recover_stress_field_global(
+    image_stack,
+    wavelengths,
+    C_values,
+    nu,
+    L,
+    S_i_hat=None,
+    polarizer_angle=None,
+    mask=None,
+    dx=1.0,
+    dy=1.0,
+    lambda_smooth=1e-6,
+    lambda_biharmonic=0.0,
+    initial_phi=None,
+    maxiter=1000,
+    method="L-BFGS-B",
+    verbose=True,
+):
+    """
+    Recover stress field globally using Airy stress function.
+
+    This is the main function for global stress field reconstruction. It sets up
+    the optimization problem and solves for the Airy stress function that best
+    fits the measured polarimetric data while enforcing smoothness.
+
+    Parameters
+    ----------
+    image_stack : ndarray
+        Image stack [H, W, 3, 4] with RGB channels and 4 polarization angles.
+    wavelengths : array-like
+        Wavelengths for RGB channels (m).
+    C_values : array-like
+        Stress-optic coefficients for RGB channels (1/Pa).
+    nu : float or ndarray
+        Solid fraction (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like, optional
+        Incoming normalized Stokes vector [S1_hat, S2_hat]. If not provided,
+        will be computed from polarizer_angle.
+    polarizer_angle : float, optional
+        Polarizer angle in radians. Used to compute S_i_hat if not provided.
+        Default is 0.0 (horizontal polarizer).
+    mask : ndarray, optional
+        Boolean mask indicating valid pixels [H, W]. If None, all pixels are used.
+    dx : float, optional
+        Grid spacing in x direction (default: 1.0).
+    dy : float, optional
+        Grid spacing in y direction (default: 1.0).
+    lambda_smooth : float, optional
+        Regularization weight for Laplacian smoothing (default: 1e-6).
+        Higher values enforce smoother solutions.
+    lambda_biharmonic : float, optional
+        Regularization weight for biharmonic smoothing (default: 0.0).
+        Enforces even smoother solutions but can be expensive.
+    initial_phi : ndarray, optional
+        Initial guess for Airy function [H, W]. If None, uses results from
+        local solver as initialization.
+    maxiter : int, optional
+        Maximum number of optimization iterations (default: 1000).
+    method : str, optional
+        Optimization method (default: 'L-BFGS-B'). Options: 'L-BFGS-B', 'CG',
+        'Newton-CG', 'trust-ncg'.
+    verbose : bool, optional
+        Print progress information (default: True).
+
+    Returns
+    -------
+    phi : ndarray
+        Airy stress function [H, W].
+    stress_field : ndarray
+        Stress components [H, W, 3] = [σ_xx, σ_yy, σ_xy].
+    result : scipy.optimize.OptimizeResult
+        Optimization result object.
+
+    Notes
+    -----
+    The optimization minimizes:
+        E = E_data + λ_smooth * E_smooth + λ_biharm * E_biharm
+
+    where:
+    - E_data is the misfit between measured and predicted Stokes parameters
+    - E_smooth is the Laplacian penalty (∇²φ)²
+    - E_biharm is the biharmonic penalty (∇⁴φ)²
+
+    Examples
+    --------
+    >>> phi, stress, result = recover_stress_field_global(
+    ...     image_stack, wavelengths, C_values, nu=1.0, L=0.01,
+    ...     polarizer_angle=0.0, lambda_smooth=1e-5
+    ... )
+    """
+    H, W, _, _ = image_stack.shape
+
+    # Compute S_i_hat if not provided
+    if S_i_hat is None:
+        if polarizer_angle is None:
+            polarizer_angle = 0.0
+        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
+
+    if mask is None:
+        mask = np.ones((H, W), dtype=bool)
+
+    if verbose:
+        print("Setting up global optimization...")
+        print(f"Grid size: {H} x {W} = {H*W} points")
+        print(f"Regularization: λ_smooth = {lambda_smooth:.2e}, λ_biharm = {lambda_biharmonic:.2e}")
+
+    # Build finite difference operators
+    D2x, D2y, Dxy, L_op = build_finite_difference_operators(W, H, dx, dy)
+
+    # Initialize Airy function
+    if initial_phi is None:
+        if verbose:
+            print("Computing initial guess from local solver...")
+
+        # Use local solver for initialization
+        from photoelastimetry.local import recover_stress_map
+
+        stress_local = recover_stress_map(image_stack, wavelengths, C_values, nu, L, S_i_hat, n_jobs=1)
+
+        # Reconstruct Airy function from local stresses (approximate)
+        # This is an approximate inverse - we solve Poisson problems
+        sigma_xx_local = stress_local[:, :, 0].flatten()
+        sigma_yy_local = stress_local[:, :, 1].flatten()
+
+        # φ_yy = σ_xx and φ_xx = σ_yy
+        # Average these two constraints with regularization
+        A = D2x + D2y + lambda_smooth * L_op.T @ L_op
+        b = D2x @ sigma_yy_local + D2y @ sigma_xx_local
+
+        try:
+            phi_init = spsolve(A, b)
+        except:
+            # Fallback to zero initialization
+            if verbose:
+                print("Warning: Could not invert for initial Airy function, using zeros")
+            phi_init = np.zeros(H * W)
+    else:
+        phi_init = initial_phi.flatten()
+
+    if verbose:
+        print(f"Starting optimization with method '{method}'...")
+
+    # Define callback for progress monitoring
+    iteration = [0]
+
+    def callback(xk):
+        iteration[0] += 1
+        if verbose and iteration[0] % 10 == 0:
+            residual = compute_global_residual(
+                xk,
+                image_stack,
+                wavelengths,
+                C_values,
+                nu,
+                L,
+                S_i_hat,
+                D2x,
+                D2y,
+                Dxy,
+                mask,
+                lambda_smooth,
+                lambda_biharmonic,
+            )
+            print(f"Iteration {iteration[0]}: residual = {residual:.6e}")
+
+    # Optimize
+    result = minimize(
+        compute_global_residual,
+        phi_init,
+        args=(
+            image_stack,
+            wavelengths,
+            C_values,
+            nu,
+            L,
+            S_i_hat,
+            D2x,
+            D2y,
+            Dxy,
+            mask,
+            lambda_smooth,
+            lambda_biharmonic,
+        ),
+        method=method,
+        options={"maxiter": maxiter, "disp": verbose},
+        callback=callback if verbose else None,
+    )
+
+    if verbose:
+        print(f"\nOptimization completed: {result.message}")
+        print(f"Final residual: {result.fun:.6e}")
+        print(f"Success: {result.success}")
+
+    # Extract final solution
+    phi = result.x.reshape(H, W)
+
+    # Compute stress field
+    sigma_xx, sigma_yy, sigma_xy = airy_to_stress(result.x, D2x, D2y, Dxy)
+    stress_field = np.stack([sigma_xx.reshape(H, W), sigma_yy.reshape(H, W), sigma_xy.reshape(H, W)], axis=-1)
+
+    # Apply mask
+    stress_field[~mask] = np.nan
+
+    return phi, stress_field, result
+
+
+def recover_stress_field_global_iterative(
+    image_stack,
+    wavelengths,
+    C_values,
+    nu,
+    L,
+    S_i_hat=None,
+    polarizer_angle=None,
+    mask=None,
+    dx=1.0,
+    dy=1.0,
+    lambda_smooth=1e-6,
+    n_iterations=5,
+    local_init=True,
+    verbose=True,
+):
+    """
+    Iterative global solver with alternating optimization strategy.
+
+    This approach alternates between:
+    1. Fixing the stress field and optimizing Airy function (enforcing equilibrium)
+    2. Fixing Airy function and locally refining to fit data better
+
+    This can be more robust than direct global optimization for difficult problems.
+
+    Parameters
+    ----------
+    image_stack : ndarray
+        Image stack [H, W, 3, 4] with RGB channels and 4 polarization angles.
+    wavelengths : array-like
+        Wavelengths for RGB channels (m).
+    C_values : array-like
+        Stress-optic coefficients for RGB channels (1/Pa).
+    nu : float or ndarray
+        Solid fraction (use 1.0 for solid samples).
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like, optional
+        Incoming normalized Stokes vector [S1_hat, S2_hat]. If not provided,
+        will be computed from polarizer_angle.
+    polarizer_angle : float, optional
+        Polarizer angle in radians. Used to compute S_i_hat if not provided.
+        Default is 0.0 (horizontal polarizer).
+    mask : ndarray, optional
+        Boolean mask indicating valid pixels [H, W].
+    dx, dy : float, optional
+        Grid spacing (default: 1.0).
+    lambda_smooth : float, optional
+        Regularization weight (default: 1e-6).
+    n_iterations : int, optional
+        Number of alternating iterations (default: 5).
+    local_init : bool, optional
+        Initialize with local solver (default: True).
+    verbose : bool, optional
+        Print progress (default: True).
+
+    Returns
+    -------
+    phi : ndarray
+        Airy stress function [H, W].
+    stress_field : ndarray
+        Stress components [H, W, 3] = [σ_xx, σ_yy, σ_xy].
+    residuals : list
+        Residual at each iteration.
+    """
+    H, W, _, _ = image_stack.shape
+
+    # Compute S_i_hat if not provided
+    if S_i_hat is None:
+        if polarizer_angle is None:
+            polarizer_angle = 0.0
+        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
+
+    if mask is None:
+        mask = np.ones((H, W), dtype=bool)
+
+    # Build operators
+    D2x, D2y, Dxy, L_op = build_finite_difference_operators(W, H, dx, dy)
+
+    # Initialize with local solver
+    if local_init:
+        if verbose:
+            print("Initializing with local solver...")
+        from photoelastimetry.solver.stokes_solver import recover_stress_map
+
+        stress_field = recover_stress_map(image_stack, wavelengths, C_values, nu, L, S_i_hat, n_jobs=-1)
+    else:
+        stress_field = np.zeros((H, W, 3))
+
+    residuals = []
+
+    for iteration in range(n_iterations):
+        if verbose:
+            print(f"\n=== Iteration {iteration + 1}/{n_iterations} ===")
+
+        # Step 1: Fit Airy function to current stress field
+        if verbose:
+            print("Fitting Airy function to stress field...")
+
+        sigma_xx_flat = stress_field[:, :, 0].flatten()
+        sigma_yy_flat = stress_field[:, :, 1].flatten()
+        sigma_xy_flat = stress_field[:, :, 2].flatten()
+
+        # Set up least squares problem: minimize ||A φ - b||² + λ ||L φ||²
+        # where A combines D2y (for σ_xx), D2x (for σ_yy), -Dxy (for σ_xy)
+        from scipy.sparse import vstack
+
+        # Weight matrix for valid pixels
+        w = mask.flatten().astype(float)
+        W_diag = diags(w)
+
+        A = vstack(
+            [
+                W_diag @ D2y,  # σ_xx = ∂²φ/∂y²
+                W_diag @ D2x,  # σ_yy = ∂²φ/∂x²
+                -W_diag @ Dxy,  # σ_xy = -∂²φ/∂x∂y
+            ]
+        )
+
+        b = np.concatenate(
+            [
+                w * sigma_xx_flat,
+                w * sigma_yy_flat,
+                w * sigma_xy_flat,
+            ]
+        )
+
+        # Solve regularized least squares
+        AtA = A.T @ A + lambda_smooth * L_op.T @ L_op
+        Atb = A.T @ b
+
+        try:
+            phi_flat = spsolve(AtA, Atb)
+            phi = phi_flat.reshape(H, W)
+        except:
+            if verbose:
+                print("Warning: Sparse solve failed, using previous phi")
+            phi = np.zeros((H, W))
+
+        # Step 2: Update stress field from Airy function
+        if verbose:
+            print("Computing stresses from Airy function...")
+
+        sigma_xx, sigma_yy, sigma_xy = airy_to_stress(phi_flat, D2x, D2y, Dxy)
+        stress_field = np.stack(
+            [sigma_xx.reshape(H, W), sigma_yy.reshape(H, W), sigma_xy.reshape(H, W)], axis=-1
+        )
+
+        # Step 3: Refine with local optimization where needed
+        if iteration < n_iterations - 1:  # Skip on last iteration
+            if verbose:
+                print("Refining with local optimization...")
+
+            # Only refine pixels with high residuals
+            n_refined = 0
+            for i in tqdm(range(H), desc="Local refinement", disable=not verbose):
+                for j in range(W):
+                    if not mask[i, j]:
+                        continue
+
+                    # Get measured Stokes
+                    S_m_hat = np.zeros((3, 2))
+                    valid = True
+                    for c in range(3):
+                        I = image_stack[i, j, c, :]
+                        if np.isnan(I).any():
+                            valid = False
+                            break
+                        S0, S1, S2 = stokes_solver.compute_stokes_components(I[0], I[1], I[2], I[3])
+                        S1_hat, S2_hat = stokes_solver.compute_normalized_stokes(S0, S1, S2)
+                        S_m_hat[c, 0] = S1_hat
+                        S_m_hat[c, 1] = S2_hat
+
+                    if not valid:
+                        continue
+
+                    # Local refinement with current stress as initial guess
+                    nu_pixel = nu if np.isscalar(nu) else nu[i, j]
+                    initial_guess = stress_field[i, j, :]
+
+                    stress_refined, success = stokes_solver.recover_stress_tensor(
+                        S_m_hat, wavelengths, C_values, nu_pixel, L, S_i_hat, initial_guess=initial_guess
+                    )
+
+                    if success:
+                        stress_field[i, j, :] = stress_refined
+                        n_refined += 1
+
+            if verbose:
+                print(f"Refined {n_refined} pixels")
+
+        # Compute residual
+        residual = compute_global_residual(
+            phi_flat,
+            image_stack,
+            wavelengths,
+            C_values,
+            nu,
+            L,
+            S_i_hat,
+            D2x,
+            D2y,
+            Dxy,
+            mask,
+            lambda_smooth,
+            0.0,
+        )
+        residuals.append(residual)
+
+        if verbose:
+            print(f"Residual: {residual:.6e}")
+
+    # Apply mask
+    stress_field[~mask] = np.nan
+
+    return phi, stress_field, residuals
+
+
+def compare_local_vs_global(
+    image_stack,
+    wavelengths,
+    C_values,
+    nu,
+    L,
+    S_i_hat,
+    mask=None,
+    lambda_smooth=1e-6,
+    true_stress=None,
+):
+    """
+    Compare local and global inversion methods.
+
+    This utility function runs both methods and provides comparison metrics.
+    Useful for validation and parameter tuning.
+
+    Parameters
+    ----------
+    image_stack : ndarray
+        Image stack [H, W, 3, 4].
+    wavelengths : array-like
+        Wavelengths for RGB channels (m).
+    C_values : array-like
+        Stress-optic coefficients (1/Pa).
+    nu : float or ndarray
+        Solid fraction.
+    L : float
+        Sample thickness (m).
+    S_i_hat : array-like
+        Incoming Stokes vector.
+    mask : ndarray, optional
+        Valid pixel mask.
+    lambda_smooth : float, optional
+        Regularization for global method.
+    true_stress : ndarray, optional
+        Ground truth stress field [H, W, 3] for validation.
+
+    Returns
+    -------
+    results : dict
+        Dictionary containing:
+        - 'local_stress': Local solver result
+        - 'global_stress': Global solver result
+        - 'global_phi': Airy function
+        - 'local_residual': Data misfit for local
+        - 'global_residual': Data misfit for global
+        - 'local_smoothness': Smoothness metric for local
+        - 'global_smoothness': Smoothness metric for global
+        - 'local_error': Error vs truth (if provided)
+        - 'global_error': Error vs truth (if provided)
+    """
+    from photoelastimetry.local import recover_stress_map
+
+    print("=== Running Local Solver ===")
+    stress_local = recover_stress_map(image_stack, wavelengths, C_values, nu, L, S_i_hat, n_jobs=-1)
+
+    print("\n=== Running Global Solver ===")
+    phi, stress_global, result = recover_stress_field_global(
+        image_stack,
+        wavelengths,
+        C_values,
+        nu,
+        L,
+        S_i_hat,
+        mask=mask,
+        lambda_smooth=lambda_smooth,
+        initial_phi=None,
+        maxiter=500,
+        verbose=True,
+    )
+
+    # Compute metrics
+    H, W = image_stack.shape[:2]
+    D2x, D2y, Dxy, L_op = build_finite_difference_operators(W, H)
+
+    if mask is None:
+        mask = np.ones((H, W), dtype=bool)
+
+    # Data residuals
+    local_residual = compute_global_residual(
+        stress_stokes_solver.flatten(),
+        image_stack,
+        wavelengths,
+        C_values,
+        nu,
+        L,
+        S_i_hat,
+        D2x,
+        D2y,
+        Dxy,
+        mask,
+        0.0,
+        0.0,
+    )
+
+    global_residual = result.fun
+
+    # Smoothness (total variation)
+    def compute_smoothness(stress):
+        grad_x = np.gradient(stress, axis=1)
+        grad_y = np.gradient(stress, axis=0)
+        return np.nanmean(grad_x**2 + grad_y**2)
+
+    local_smoothness = sum(compute_smoothness(stress_local[:, :, i]) for i in range(3))
+    global_smoothness = sum(compute_smoothness(stress_global[:, :, i]) for i in range(3))
+
+    results = {
+        "local_stress": stress_local,
+        "global_stress": stress_global,
+        "global_phi": phi,
+        "local_residual": local_residual,
+        "global_residual": global_residual,
+        "local_smoothness": local_smoothness,
+        "global_smoothness": global_smoothness,
+    }
+
+    # Error vs ground truth
+    if true_stress is not None:
+        local_error = np.nanmean((stress_local - true_stress) ** 2)
+        global_error = np.nanmean((stress_global - true_stress) ** 2)
+        results["local_error"] = local_error
+        results["global_error"] = global_error
+
+        print(f"\n=== Comparison Results ===")
+        print(f"Local RMSE vs truth: {np.sqrt(local_error):.6e}")
+        print(f"Global RMSE vs truth: {np.sqrt(global_error):.6e}")
+
+    print(f"\nLocal data residual: {local_residual:.6e}")
+    print(f"Global data residual: {global_residual:.6e}")
+    print(f"Local smoothness: {local_smoothness:.6e}")
+    print(f"Global smoothness: {global_smoothness:.6e}")
+
+    return results
