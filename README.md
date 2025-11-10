@@ -119,5 +119,5 @@ pip install -e .
 
 ## Authors
 
-- [Benjy Marks](benjy.marks@sydney.edu.au)
-- [Qianyu Fang](qianyu.fang@sydney.edu.au)
+- [Benjy Marks](mailto:benjy.marks@sydney.edu.au)
+- [Qianyu Fang](mailto:qianyu.fang@sydney.edu.au)
