@@ -2,7 +2,21 @@
 
 This page provides practical examples for using the photoelastimetry package.
 
-## Example 1: Basic Stress Analysis
+## Example 1: Elastic Disk Solution
+
+You can generate a pre-set disk stress solution for validation using the parameters in `json/test.json5`:
+
+```bash
+python photoelastimetry/disk.py
+```
+
+This can be inverted to recover the stress field using the standard solvers via
+
+```bash
+image-to-stress json/test.json5
+```
+
+## Example 2: Basic Stress Analysis
 
 Analyze a set of photoelastic images to extract stress fields:
 
@@ -42,7 +56,7 @@ sigma_yy = stress_map[..., 1]
 sigma_xy = stress_map[..., 2]
 ```
 
-## Example 2: Using Command Line Tools
+## Example 3: Using Command Line Tools
 
 ### Process Raw Images
 
@@ -65,41 +79,6 @@ EOF
 
 # Run stress analysis
 image-to-stress params.json5 --output stress_field.png
-```
-
-## Example 3: Elastic Disk Solution
-
-Simulate and visualize the photoelastic response of a compressed disk:
-
-```python
-import photoelastimetry.disk as disk
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Disk parameters
-radius = 0.05  # meters
-force = 100.0  # Newtons
-C = 5e-11  # Stress-optic coefficient
-nu = 1.0  # Solid fraction
-thickness = 0.005  # meters
-wavelength = 550e-9  # meters
-
-# Create grid
-x = np.linspace(-radius, radius, 200)
-y = np.linspace(-radius, radius, 200)
-X, Y = np.meshgrid(x, y)
-
-# Compute stress field using disk solution
-# (See API reference for available functions)
-
-# Simulate polarimetric response
-# ...
-
-plt.figure(figsize=(10, 8))
-plt.imshow(stress_field, cmap='viridis')
-plt.colorbar(label='Stress (Pa)')
-plt.title('Stress Field in Compressed Disk')
-plt.show()
 ```
 
 ## Example 4: Comparing Solver Methods

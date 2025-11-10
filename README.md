@@ -10,6 +10,10 @@ To install the package, run the following command in the terminal:
 pip install photoelastimetry
 ```
 
+## Documentation
+
+Full documentation is available [here](https://benjym.github.io/photoelastimetry/).
+
 ## Usage
 
 After installation, two command line scripts are available:

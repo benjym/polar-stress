@@ -509,8 +509,8 @@ if __name__ == "__main__":
     # remove nans
     stress = np.nan_to_num(stress, nan=0.0)
 
-    if not os.path.exists("images/test"):
-        os.makedirs("images/test")
+    os.makedirs("images/test", exist_ok=True)
+
     photoelastimetry.io.save_image("images/test/disk_synthetic_stress.tiff", stress)
     photoelastimetry.io.save_image("images/test/disk_synthetic_images.tiff", synthetic_images)
 
