@@ -328,9 +328,9 @@ class TestDemosaicRawImage:
             raw_file = os.path.join(tmpdir, "test.raw")
             raw_data.tofile(raw_file)
 
-            # metadata = {"width": 16, "height": 16, "dtype": "uint16"}
+            metadata = {"width": 16, "height": 16, "dtype": "uint16"}
 
-            # demosaiced = main.demosaic_raw_image(raw_file, metadata, output_format="tiff")
+            main.demosaic_raw_image(raw_file, metadata, output_format="tiff")
 
             # Check that output uses input filename as prefix
             expected_output = os.path.join(tmpdir, "test_demosaiced.tiff")
