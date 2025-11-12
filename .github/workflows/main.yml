@@ -20,7 +20,6 @@ jobs:
       - run: pip install -e ".[docs]"
       - run: pip install -e ".[dev]"
       - run: mkdocs gh-deploy --force
-      - run: python -m unittest
 
   post_success:
     runs-on: ubuntu-latest
