@@ -125,6 +125,8 @@ To set up the development environment, clone the repository and install the pack
 git clone https://github.com/benjym/photoelastimetry.git
 cd photoelastimetry
 pip install -e ".[dev]"
+# Set up pre-commit hooks
+pre-commit install
 ```
 
 ### Running Tests
