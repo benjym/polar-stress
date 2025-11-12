@@ -52,25 +52,27 @@ class TestFiniteDifferenceOperators:
         height = sample_grid["height"]
         width = sample_grid["width"]
 
-        D2x, D2y, Dxy = build_finite_difference_operators(height, width)
+        D2x, D2y, Dxy, L = build_finite_difference_operators(height, width)
 
         # Check that operators are sparse matrices
         assert hasattr(D2x, "shape"), "D2x should be a matrix"
         assert hasattr(D2y, "shape"), "D2y should be a matrix"
         assert hasattr(Dxy, "shape"), "Dxy should be a matrix"
+        assert hasattr(L, "shape"), "L (Laplacian) should be a matrix"
 
         # Check dimensions
         n_pixels = height * width
         assert D2x.shape == (n_pixels, n_pixels), "D2x should be square with size n_pixels"
         assert D2y.shape == (n_pixels, n_pixels), "D2y should be square with size n_pixels"
         assert Dxy.shape == (n_pixels, n_pixels), "Dxy should be square with size n_pixels"
+        assert L.shape == (n_pixels, n_pixels), "L should be square with size n_pixels"
 
     def test_finite_difference_operators_symmetry(self, sample_grid):
         """Test symmetry properties of finite difference operators."""
         height = sample_grid["height"]
         width = sample_grid["width"]
 
-        D2x, D2y, Dxy = build_finite_difference_operators(height, width)
+        D2x, D2y, Dxy, L = build_finite_difference_operators(height, width)
 
         # D2x and D2y should be symmetric (for second derivatives)
         # Convert to dense for easier testing if sparse
@@ -96,22 +98,33 @@ class TestAiryToStress:
         dx = test_parameters["dx"]
         dy = test_parameters["dy"]
 
+        # Build finite difference operators
+        D2x, D2y, Dxy, L = build_finite_difference_operators(height, width, dx, dy)
+
         # Create a simple Airy function (quadratic)
         phi = np.zeros((height, width))
         y, x = np.meshgrid(range(height), range(width), indexing="ij")
         phi = 0.1 * x**2 + 0.05 * y**2  # Simple quadratic Airy function
 
-        sigma_xx, sigma_yy, sigma_xy = airy_to_stress(phi, dx, dy)
+        sigma_xx, sigma_yy, sigma_xy = airy_to_stress(phi, D2x, D2y, Dxy)
 
-        # Check output shapes
-        assert sigma_xx.shape == (height, width), "sigma_xx should match grid shape"
-        assert sigma_yy.shape == (height, width), "sigma_yy should match grid shape"
-        assert sigma_xy.shape == (height, width), "sigma_xy should match grid shape"
+        # Check output shapes (returns flattened arrays)
+        n_pixels = height * width
+        assert sigma_xx.shape == (n_pixels,), f"sigma_xx should be flattened, got shape {sigma_xx.shape}"
+        assert sigma_yy.shape == (n_pixels,), f"sigma_yy should be flattened, got shape {sigma_yy.shape}"
+        assert sigma_xy.shape == (n_pixels,), f"sigma_xy should be flattened, got shape {sigma_xy.shape}"
 
         # Check that values are finite
         assert np.all(np.isfinite(sigma_xx)), "All sigma_xx values should be finite"
         assert np.all(np.isfinite(sigma_yy)), "All sigma_yy values should be finite"
         assert np.all(np.isfinite(sigma_xy)), "All sigma_xy values should be finite"
+
+        # Reshape to 2D for further checks if needed
+        sigma_xx_2d = sigma_xx.reshape(height, width)
+        # sigma_yy_2d = sigma_yy.reshape(height, width)
+        # sigma_xy_2d = sigma_xy.reshape(height, width)
+
+        assert sigma_xx_2d.shape == (height, width), "Reshaped sigma_xx should match grid"
 
     def test_airy_to_stress_constant(self, sample_grid, test_parameters):
         """Test Airy function conversion for constant Airy function."""
@@ -120,16 +133,24 @@ class TestAiryToStress:
         dx = test_parameters["dx"]
         dy = test_parameters["dy"]
 
+        # Build finite difference operators
+        D2x, D2y, Dxy, L = build_finite_difference_operators(height, width, dx, dy)
+
         # Constant Airy function should give zero stress
         phi_constant = np.ones((height, width))
 
-        sigma_xx, sigma_yy, sigma_xy = airy_to_stress(phi_constant, dx, dy)
+        sigma_xx, sigma_yy, sigma_xy = airy_to_stress(phi_constant, D2x, D2y, Dxy)
+
+        # Reshape to 2D
+        sigma_xx_2d = sigma_xx.reshape(height, width)
+        sigma_yy_2d = sigma_yy.reshape(height, width)
+        sigma_xy_2d = sigma_xy.reshape(height, width)
 
         # Interior points should have zero stress for constant phi
         # (boundary effects may cause non-zero values at edges)
-        interior_xx = sigma_xx[1:-1, 1:-1]
-        interior_yy = sigma_yy[1:-1, 1:-1]
-        interior_xy = sigma_xy[1:-1, 1:-1]
+        interior_xx = sigma_xx_2d[1:-1, 1:-1]
+        interior_yy = sigma_yy_2d[1:-1, 1:-1]
+        interior_xy = sigma_xy_2d[1:-1, 1:-1]
 
         assert np.allclose(interior_xx, 0.0, atol=1e-10), "Constant phi should give zero sigma_xx in interior"
         assert np.allclose(interior_yy, 0.0, atol=1e-10), "Constant phi should give zero sigma_yy in interior"
@@ -152,7 +173,14 @@ class TestGlobalResidual:
         phi = np.random.rand(height * width) * 0.01  # Small random Airy function
 
         # Build finite difference operators
-        D2x, D2y, Dxy = build_finite_difference_operators(height, width)
+        D2x, D2y, Dxy, L = build_finite_difference_operators(height, width)
+
+        # Create mask (all valid pixels)
+        mask = np.ones((height, width), dtype=bool)
+
+        # Note: image_stack should be [H, W, 3, 4] not [H, W, 3, 2]
+        # Fixing to match actual expected format
+        image_stack = np.random.rand(height, width, n_wavelengths, 4) * 0.1
 
         try:
             residual = compute_global_residual(
@@ -162,17 +190,16 @@ class TestGlobalResidual:
                 test_parameters["C_values"],
                 test_parameters["nu"],
                 test_parameters["L"],
-                test_parameters["S_i_hat"][:2],  # Only S1_hat, S2_hat for Stokes
+                test_parameters["S_i_hat"],
                 D2x,
                 D2y,
                 Dxy,
-                test_parameters["dx"],
-                test_parameters["dy"],
+                mask,
             )
 
             # Check output properties
-            assert len(residual) > 0, "Residual should have non-zero length"
-            assert np.all(np.isfinite(residual)), "All residual values should be finite"
+            assert np.isfinite(residual), "Residual should be finite"
+            assert residual >= 0, "Residual should be non-negative"
 
         except Exception as e:
             # If there are issues with the implementation, document them
@@ -191,7 +218,13 @@ class TestGlobalResidual:
         phi_zero = np.zeros(height * width)
 
         # Build finite difference operators
-        D2x, D2y, Dxy = build_finite_difference_operators(height, width)
+        D2x, D2y, Dxy, L = build_finite_difference_operators(height, width)
+
+        # Create mask (all valid pixels)
+        mask = np.ones((height, width), dtype=bool)
+
+        # Fix image_stack shape to [H, W, 3, 4]
+        image_stack = np.random.rand(height, width, n_wavelengths, 4) * 0.1
 
         try:
             residual = compute_global_residual(
@@ -201,15 +234,14 @@ class TestGlobalResidual:
                 test_parameters["C_values"],
                 test_parameters["nu"],
                 test_parameters["L"],
-                test_parameters["S_i_hat"][:2],
+                test_parameters["S_i_hat"],
                 D2x,
                 D2y,
                 Dxy,
-                test_parameters["dx"],
-                test_parameters["dy"],
+                mask,
             )
 
-            assert np.all(np.isfinite(residual)), "Residual should be finite for zero Airy function"
+            assert np.isfinite(residual), "Residual should be finite for zero Airy function"
 
         except Exception as e:
             pytest.skip(f"Zero phi test skipped: {e}")

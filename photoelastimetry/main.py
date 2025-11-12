@@ -1,11 +1,13 @@
-import os
 import argparse
+import os
+
 import json5
 import numpy as np
 from scipy.ndimage import gaussian_filter
+
+import photoelastimetry.io
 import photoelastimetry.plotting
 import photoelastimetry.solver.stokes_solver
-import photoelastimetry.io
 
 
 def image_to_stress(params, output_filename=None):
@@ -90,7 +92,7 @@ def image_to_stress(params, output_filename=None):
 
     # Calculate stress map from image
     n_jobs = params.get("n_jobs", -1)  # Default to using all cores
-    stress_map = photoelastimetry.solver.stokes_solver.recover_stress_map(
+    stress_map = photoelastimetry.solver.stokes_solver.recover_stress_map_stokes(
         data,
         WAVELENGTHS,
         C_VALUES,
@@ -105,6 +107,8 @@ def image_to_stress(params, output_filename=None):
 
     if output_filename is not None:
         photoelastimetry.io.save_image(output_filename, stress_map, metadata)
+
+    return stress_map
 
 
 def stress_to_image(params):
