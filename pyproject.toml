@@ -27,7 +27,6 @@ dev = [
     "pytest-xdist",
     "coverage[toml]",
     "black",
-    "flake8",
     "pre-commit",
 ]
 docs = [

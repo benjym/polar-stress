@@ -19,13 +19,6 @@ repos:
         language_version: python3
         args: ['--line-length=110']
 
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.0.0
-    hooks:
-      - id: flake8
-        args: ['--max-line-length=110', '--max-complexity=15', '--ignore=E741,F401,F811,E722,F541,C901,W503,E203,E501']
-        exclude: '^(docs|tests/test_stokes_solver\.py)/'
-
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
