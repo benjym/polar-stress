@@ -1,5 +1,11 @@
 # photoelastimetry
 
+[![Tests](https://github.com/benjym/photoelastimetry/actions/workflows/test.yml/badge.svg)](https://github.com/benjym/photoelastimetry/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/benjym/photoelastimetry/branch/main/graph/badge.svg)](https://codecov.io/gh/benjym/photoelastimetry)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 Package for processing polarised images to measure stress in granular media
 
 ## Installation
@@ -43,7 +49,7 @@ The JSON5 parameter file should contain:
 - `C`: Stress-optic coefficient in 1/Pa
 - `thickness`: Sample thickness in meters
 - `wavelengths`: List of wavelengths in nanometers
-- `polariser_angle` (optional): Polariser angle in degrees relative to the 0 degree camera axis (default: 0.0)
+- `S_i_hat`: Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat] representing polarization state
 - `crop` (optional): Crop region as [y1, y2, x1, x2]
 - `debug` (optional): If true, display all channels for debugging
 
@@ -113,13 +119,63 @@ demosaic-raw images/ --format png --all
 
 ## Development
 
-To set up the development environment, clone the repository and install the package in editable mode:
+To set up the development environment, clone the repository and install the package in editable mode with development dependencies:
 
 ```bash
 git clone https://github.com/benjym/photoelastimetry.git
 cd photoelastimetry
-pip install -e .
+pip install -e ".[dev]"
 ```
+
+### Running Tests
+
+The project uses `pytest` for testing with comprehensive coverage analysis:
+
+```bash
+# Run all tests
+pytest
+
+# Run tests with coverage report
+pytest --cov=photoelastimetry --cov-report=html
+
+# Run specific test file
+pytest tests/test_stokes_solver_pytest.py -v
+
+# Run tests in parallel (faster)
+pytest -n auto
+```
+
+### Code Coverage
+
+View the coverage report by opening `htmlcov/index.html` in your browser after running tests with coverage enabled.
+
+Current test coverage includes:
+- Stokes solver: photoelastic stress recovery using normalised Stokes parameters
+- Intensity solver: raw intensity-based stress recovery with noise modelling
+- Equilibrium solver: global stress field recovery enforcing mechanical equilibrium
+- Disk simulations: synthetic photoelastic data generation
+- Image processing: retardance, principal angle, and Mueller matrix calculations
+
+### Code Quality
+
+The project uses `black` for code formatting and `flake8` for linting:
+
+```bash
+# Format code
+black photoelastimetry tests
+
+# Check code style
+flake8 photoelastimetry
+```
+
+### Continuous Integration
+
+GitHub Actions automatically runs tests on:
+- Python 3.9, 3.10, 3.11, and 3.12
+- Multiple operating systems (Ubuntu)
+- Every push and pull request
+
+Test coverage is automatically uploaded to Codecov for tracking.
 
 ## Authors
 

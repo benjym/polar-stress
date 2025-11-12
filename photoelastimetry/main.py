@@ -24,8 +24,7 @@ def image_to_stress(params, output_filename=None):
             - C (float): Stress-optic coefficient in 1/Pa
             - thickness (float): Sample thickness in meters
             - wavelengths (list): List of wavelengths in nanometers
-            - polariser_angle (float, optional): Polariser angle in degrees relative to the 0 degree camera axis.
-              Defaults to 0.0.
+            - S_i_hat (list): Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat]
         output_filename (str, optional): Path to save the output stress map image.
             If None, the stress map is not saved. Defaults to None. Can also be specified in params.
 
@@ -83,11 +82,11 @@ def image_to_stress(params, output_filename=None):
             C,
         ]  # Stress-optic coefficients in 1/Pa
 
-    polariser_angle_deg = params.get("polariser_angle", 0.0)
-    polariser_angle_rad = np.deg2rad(polariser_angle_deg)
-    # Assume light fully polarised in polariser direction
-    S_I_HAT = np.array([np.cos(polariser_angle_rad), np.sin(polariser_angle_rad)])
-    # S_I_HAT = np.array([1.0, 0.0])  # Incoming light is fully S1 polarized
+    # Get incoming polarization state from config
+    S_I_HAT = np.array(params["S_i_hat"])
+    # Ensure it's 3 elements for consistency
+    if len(S_I_HAT) == 2:
+        S_I_HAT = np.append(S_I_HAT, 0.0)  # Add S3_hat = 0 for backward compatibility
 
     # Calculate stress map from image
     n_jobs = params.get("n_jobs", -1)  # Default to using all cores

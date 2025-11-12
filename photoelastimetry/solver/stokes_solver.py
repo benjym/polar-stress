@@ -93,7 +93,9 @@ def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat):
     wavelength : float
         Wavelength of light (m).
     S_i_hat : array-like
-        Incoming normalized Stokes vector [S1_hat, S2_hat, 0, 0].
+        Incoming normalized Stokes vector [S1_hat, S2_hat] or [S1_hat, S2_hat, S3_hat].
+        If 2 elements, S3_hat is assumed to be 0 (no circular polarization).
+        If 3 elements, S3_hat represents circular polarization component.
 
     Returns
     -------
@@ -106,7 +108,15 @@ def predict_stokes(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavelength, S_i_hat):
     M = mueller_matrix(theta, delta)
 
     # Extend S_i_hat to full Stokes vector
-    S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], 0.0])
+    S_i_hat = np.asarray(S_i_hat)
+    if len(S_i_hat) == 2:
+        # Backward compatibility: assume S3 = 0 (no circular polarization)
+        S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], 0.0])
+    elif len(S_i_hat) == 3:
+        # Use provided circular component
+        S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], S_i_hat[2]])
+    else:
+        raise ValueError(f"S_i_hat must have 2 or 3 elements, got {len(S_i_hat)}")
 
     # Apply Mueller matrix
     S_m = M @ S_i_full
@@ -136,7 +146,7 @@ def compute_residual(stress_params, S_m_hat, wavelengths, C_values, nu, L, S_i_h
     L : float
         Sample thickness (m).
     S_i_hat : array-like
-        Incoming normalized Stokes vector [S1_hat, S2_hat].
+        Incoming normalized Stokes vector [S1_hat, S2_hat] or [S1_hat, S2_hat, S3_hat].
 
     Returns
     -------
@@ -181,7 +191,7 @@ def recover_stress_tensor(S_m_hat, wavelengths, C_values, nu, L, S_i_hat, initia
     L : float
         Sample thickness (m).
     S_i_hat : array-like
-        Incoming normalized Stokes vector [S1_hat, S2_hat].
+        Incoming normalized Stokes vector [S1_hat, S2_hat] or [S1_hat, S2_hat, S3_hat].
     initial_guess : array-like, optional
         Initial guess for stress tensor [sigma_xx, sigma_yy, sigma_xy].
         Default is [1, 1, 1].
@@ -275,14 +285,13 @@ def _process_pixel(args):
         return (y, x, np.array([np.nan, np.nan, np.nan]))
 
 
-def recover_stress_map(
+def recover_stress_map_stokes(
     image_stack,
     wavelengths,
     C_values,
     nu,
     L,
-    S_i_hat=None,
-    polarizer_angle=0.0,
+    S_i_hat,
     n_jobs=-1,
 ):
     """
@@ -304,12 +313,8 @@ def recover_stress_map(
         Can be scalar or array matching image dimensions.
     L : float
         Sample thickness (m).
-    S_i_hat : array-like, optional
-        Incoming normalized Stokes vector [S1_hat, S2_hat].
-        If None, computed from polarizer_angle.
-    polarizer_angle : float, optional
-        Polarizer angle in radians (default: 0.0).
-        Only used if S_i_hat is None.
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat] or [S1_hat, S2_hat, S3_hat].
     n_jobs : int, optional
         Number of parallel jobs. -1 uses all available cores (default: -1).
 
@@ -318,8 +323,6 @@ def recover_stress_map(
     stress_map : ndarray
         Array of shape [H, W, 3] containing [sigma_xx, sigma_yy, sigma_xy] in Pa.
     """
-    if S_i_hat is None:
-        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
     from joblib import Parallel, delayed
 
     H, W, _, _ = image_stack.shape

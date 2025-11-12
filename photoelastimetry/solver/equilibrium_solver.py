@@ -172,7 +172,7 @@ def compute_global_residual(
     L : float
         Sample thickness (m).
     S_i_hat : array-like
-        Incoming normalized Stokes vector [S1_hat, S2_hat].
+        Incoming normalized Stokes vector [S1_hat, S2_hat] or [S1_hat, S2_hat, S3_hat].
     D2x, D2y, Dxy : scipy.sparse matrix
         Finite difference operators.
     mask : ndarray
@@ -275,8 +275,7 @@ def recover_stress_field_global(
     C_values,
     nu,
     L,
-    S_i_hat=None,
-    polarizer_angle=None,
+    S_i_hat,
     mask=None,
     dx=1.0,
     dy=1.0,
@@ -306,12 +305,8 @@ def recover_stress_field_global(
         Solid fraction (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
-    S_i_hat : array-like, optional
-        Incoming normalized Stokes vector [S1_hat, S2_hat]. If not provided,
-        will be computed from polarizer_angle.
-    polarizer_angle : float, optional
-        Polarizer angle in radians. Used to compute S_i_hat if not provided.
-        Default is 0.0 (horizontal polarizer).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     mask : ndarray, optional
         Boolean mask indicating valid pixels [H, W]. If None, all pixels are used.
     dx : float, optional
@@ -358,16 +353,10 @@ def recover_stress_field_global(
     --------
     >>> phi, stress, result = recover_stress_field_global(
     ...     image_stack, wavelengths, C_values, nu=1.0, L=0.01,
-    ...     polarizer_angle=0.0, lambda_smooth=1e-5
+    ...     S_i_hat=np.array([1.0, 0.0, 0.0]), lambda_smooth=1e-5
     ... )
     """
     H, W, _, _ = image_stack.shape
-
-    # Compute S_i_hat if not provided
-    if S_i_hat is None:
-        if polarizer_angle is None:
-            polarizer_angle = 0.0
-        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
 
     if mask is None:
         mask = np.ones((H, W), dtype=bool)
@@ -483,8 +472,7 @@ def recover_stress_field_global_iterative(
     C_values,
     nu,
     L,
-    S_i_hat=None,
-    polarizer_angle=None,
+    S_i_hat,
     mask=None,
     dx=1.0,
     dy=1.0,
@@ -514,12 +502,8 @@ def recover_stress_field_global_iterative(
         Solid fraction (use 1.0 for solid samples).
     L : float
         Sample thickness (m).
-    S_i_hat : array-like, optional
-        Incoming normalized Stokes vector [S1_hat, S2_hat]. If not provided,
-        will be computed from polarizer_angle.
-    polarizer_angle : float, optional
-        Polarizer angle in radians. Used to compute S_i_hat if not provided.
-        Default is 0.0 (horizontal polarizer).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     mask : ndarray, optional
         Boolean mask indicating valid pixels [H, W].
     dx, dy : float, optional
@@ -543,12 +527,6 @@ def recover_stress_field_global_iterative(
         Residual at each iteration.
     """
     H, W, _, _ = image_stack.shape
-
-    # Compute S_i_hat if not provided
-    if S_i_hat is None:
-        if polarizer_angle is None:
-            polarizer_angle = 0.0
-        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
 
     if mask is None:
         mask = np.ones((H, W), dtype=bool)

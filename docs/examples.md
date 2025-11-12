@@ -71,7 +71,7 @@ cat > params.json5 << EOF
   "C": 5e-11,
   "thickness": 0.005,
   "wavelengths": [450, 550, 650],
-  "polariser_angle": 0.0,
+  "S_i_hat": [1.0, 0.0, 0.0],
   "crop": [200, 1800, 200, 2200],
   "debug": false
 }

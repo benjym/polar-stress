@@ -1,5 +1,9 @@
 {
-    polariser_angle : 0, // in degrees
+    // Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat]
+    // For linear polarizer at 0°: [1.0, 0.0, 0.0]
+    // For linear polarizer at 45°: [0.0, 1.0, 0.0]  
+    // For circular polarizer: [0.0, 0.0, 1.0]
+    S_i_hat : [1.0, 0.0, 0.0], // Incoming polarization state
     wavelengths : [650, 550, 450], // R, G, B wavelengths (nm)
     C : [2e-12,2e-12,2e-12], // stress-optic coefficient for each wavelength (1/Pa)
     thickness : 0.01, // thickness of sample in m

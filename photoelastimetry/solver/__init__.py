@@ -16,7 +16,7 @@ from photoelastimetry.solver.stokes_solver import (
     compute_residual,
     recover_stress_tensor,
     compute_solid_fraction,
-    recover_stress_map as recover_stress_map_stokes,
+    recover_stress_map_stokes,
 )
 
 from photoelastimetry.image import (
@@ -38,7 +38,7 @@ from photoelastimetry.solver.intensity_solver import (
     predict_intensity,
     compute_intensity_residual,
     recover_stress_tensor_intensity,
-    recover_stress_map as recover_stress_map_intensity,
+    recover_stress_map,
     compare_stokes_vs_intensity,
 )
 
@@ -58,7 +58,7 @@ __all__ = [
     "predict_intensity",
     "compute_intensity_residual",
     "recover_stress_tensor_intensity",
-    "recover_stress_map_intensity",
+    "recover_stress_map",
     "compare_stokes_vs_intensity",
     # Equilibrium solver
     "build_finite_difference_operators",

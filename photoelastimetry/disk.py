@@ -33,7 +33,7 @@ def simulate_four_step_polarimetry(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavel
     wavelength : float
         Wavelength of light (m).
     S_i_hat : array-like
-        Incoming normalized Stokes vector [S1_hat, S2_hat].
+        Incoming normalized Stokes vector [S1_hat, S2_hat] or [S1_hat, S2_hat, S3_hat].
     I0 : float
         Incident light intensity (default: 1.0).
 
@@ -49,7 +49,15 @@ def simulate_four_step_polarimetry(sigma_xx, sigma_yy, sigma_xy, C, nu, L, wavel
     M = local.mueller_matrix(theta, delta)
 
     # Create full incoming Stokes vector
-    S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], 0.0])
+    S_i_hat = np.asarray(S_i_hat)
+    if len(S_i_hat) == 2:
+        # Backward compatibility: assume S3 = 0 (no circular polarization)
+        S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], 0.0])
+    elif len(S_i_hat) == 3:
+        # Use provided circular component
+        S_i_full = np.array([1.0, S_i_hat[0], S_i_hat[1], S_i_hat[2]])
+    else:
+        raise ValueError(f"S_i_hat must have 2 or 3 elements, got {len(S_i_hat)}")
 
     # Apply Mueller matrix to get output Stokes vector
     if M.ndim == 2:
@@ -127,7 +135,9 @@ def diametrical_stress_cartesian(X, Y, P, R):
     return sigma_xx, sigma_yy, tau_xy
 
 
-def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, C, polarisation_efficiency):
+def generate_synthetic_brazil_test(
+    X, Y, P, R, S_i_hat, mask, wavelengths_nm, thickness, C, polarisation_efficiency
+):
     """
     Generate synthetic Brazil test data for validation
     This function creates a synthetic dataset based on the analytical solution
@@ -159,7 +169,7 @@ def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, 
     synthetic_images = np.empty((height, width, 3, 4))  # RGB, 4 polarizer angles
 
     # Use incoming light fully S1 polarized (standard setup)
-    S_i_hat = np.array([1.0, 0.0])
+    # S_i_hat = np.array([0.0, 0.0, 1.0])
     nu = 1.0  # Solid sample
 
     for i, lambda_light in tqdm(enumerate(wavelengths_nm)):
@@ -184,15 +194,7 @@ def generate_synthetic_brazil_test(X, Y, P, R, mask, wavelengths_nm, thickness, 
 
 
 def post_process_synthetic_data(
-    principal_diff,
-    theta_p,
-    sigma_xx,
-    sigma_yy,
-    tau_xy,
-    t_sample,
-    C,
-    lambda_light,
-    outname,
+    principal_diff, theta_p, sigma_xx, sigma_yy, tau_xy, S_i_hat, t_sample, C, lambda_light, outname
 ):
     plt.figure(figsize=(12, 12), layout="constrained")
 
@@ -210,7 +212,7 @@ def post_process_synthetic_data(
 
     # Generate four-step polarimetry images using Mueller matrix approach
     # Use incoming light fully S1 polarized (standard setup)
-    S_i_hat = np.array([1.0, 0.0])
+
     nu = 1.0  # Solid sample
     I0_pol, I45_pol, I90_pol, I135_pol = simulate_four_step_polarimetry(
         sigma_xx, sigma_yy, tau_xy, C, nu, t_sample, lambda_light, S_i_hat
@@ -491,12 +493,16 @@ if __name__ == "__main__":
     R_grid = np.sqrt(X**2 + Y**2)  # radial distance from center
     mask = R_grid <= R
 
+    # Get S_i_hat from params if available, otherwise use default
+    S_i_hat = np.array(params.get("S_i_hat", [1.0, 0.0, 0.0]))
+
     # Generate synthetic Brazil test data
     synthetic_images, principal_diff, theta_p, sigma_xx, sigma_yy, tau_xy = generate_synthetic_brazil_test(
         X,
         Y,
         P,
         R,
+        S_i_hat,
         mask,
         wavelengths_nm,
         thickness,
@@ -527,6 +533,7 @@ if __name__ == "__main__":
             sigma_xx,
             sigma_yy,
             tau_xy,
+            S_i_hat,
             thickness,
             C[i],
             lambda_light,

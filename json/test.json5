@@ -1,5 +1,6 @@
 {
-    polariser_angle : 0, // in degrees
+    // Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat]
+    S_i_hat : [1.0, 0.0, 0.0], // Incoming polarization state
     binning: 2,
     // crop : [300, 515, 415, 645], //  Crop region as [x1, x2, y1, y2]
     wavelengths : [650, 550, 450], // R, G, B wavelengths (nm)

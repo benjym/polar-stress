@@ -36,7 +36,7 @@ C_VALUES = np.array([1e-10, 1e-10, 1e-10])  # Stress-optic coefficients (1/Pa)
 NU = 1.0  # Solid fraction
 L = 0.01  # Sample thickness (m)
 ANALYZER_ANGLES = np.array([0, np.pi / 4, np.pi / 2, 3 * np.pi / 4])  # 0°, 45°, 90°, 135°
-POLARIZER_ANGLE = 0.0  # Polarizer at 0°
+S_I_HAT = np.array([1.0, 0.0, 0.0])  # Linear polarization at 0°
 I0 = 1.0  # Incident intensity
 
 # Cache directory
@@ -137,7 +137,7 @@ def compute_intensities_vs_stress_magnitude(
                 L,
                 WAVELENGTHS[c],
                 ANALYZER_ANGLES,
-                POLARIZER_ANGLE,
+                S_I_HAT,
                 I0,
             )
             intensities[i, c, :] = I_pred
@@ -216,7 +216,7 @@ def test_stress_recovery_vs_retardation(max_stress=10e6, n_points=50, noise_leve
                 L,
                 WAVELENGTHS[c],
                 ANALYZER_ANGLES,
-                POLARIZER_ANGLE,
+                S_I_HAT,
                 I0,
             )
             # Add noise if specified
@@ -238,8 +238,8 @@ def test_stress_recovery_vs_retardation(max_stress=10e6, n_points=50, noise_leve
             C_VALUES,
             NU,
             L,
+            S_I_HAT,
             ANALYZER_ANGLES,
-            POLARIZER_ANGLE,
             I0,
             weights=weights,
             initial_guess=np.array([stress, -0.5 * stress, 0.3 * stress]),
@@ -328,7 +328,7 @@ def test_noise_sensitivity(stress_tensor, noise_levels, n_trials=100, use_cache=
                     L,
                     WAVELENGTHS[c],
                     ANALYZER_ANGLES,
-                    POLARIZER_ANGLE,
+                    S_I_HAT,
                     I0,
                 )
                 # Add Gaussian noise proportional to mean intensity
@@ -347,8 +347,8 @@ def test_noise_sensitivity(stress_tensor, noise_levels, n_trials=100, use_cache=
                 C_VALUES,
                 NU,
                 L,
+                S_I_HAT,
                 ANALYZER_ANGLES,
-                POLARIZER_ANGLE,
                 I0,
                 weights=weights,
                 initial_guess=stress_tensor,
@@ -437,7 +437,7 @@ def test_angular_variation(stress_magnitude=5e6, n_angles=50, use_cache=True):
                 L,
                 WAVELENGTHS[c],
                 ANALYZER_ANGLES,
-                POLARIZER_ANGLE,
+                S_I_HAT,
                 I0,
             )
 
@@ -452,8 +452,8 @@ def test_angular_variation(stress_magnitude=5e6, n_angles=50, use_cache=True):
             C_VALUES,
             NU,
             L,
+            S_I_HAT,
             ANALYZER_ANGLES,
-            POLARIZER_ANGLE,
             I0,
             weights=weights,
             initial_guess=np.array([sigma_xx, sigma_yy, sigma_xy]),

@@ -1,5 +1,7 @@
 {
     mode : "HGD",
+    // Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat]
+    S_i_hat : [1.0, 0.0, 0.0], // Incoming polarization state (linear at 0°)
     t : 0.005,  // Thickness in meters
     C : 1e-7,  // Stress-optic coefficient (Pa^-1)
     lambda_light : 550e-9,  // Wavelength of light in meters

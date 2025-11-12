@@ -33,7 +33,7 @@ The JSON5 parameter file should contain:
 - `C`: Stress-optic coefficient in 1/Pa
 - `thickness`: Sample thickness in meters
 - `wavelengths`: List of wavelengths in nanometers
-- `polariser_angle` (optional): Polariser angle in degrees relative to the 0 degree camera axis (default: 0.0)
+- `S_i_hat`: Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat] representing polarization state
 - `crop` (optional): Crop region as [y1, y2, x1, x2]
 - `debug` (optional): If true, display all channels for debugging
 
@@ -45,7 +45,7 @@ The JSON5 parameter file should contain:
   "C": 5e-11,
   "thickness": 0.005,
   "wavelengths": [450, 550, 650],
-  "polariser_angle": 0.0,
+  "S_i_hat": [1.0, 0.0, 0.0],
   "crop": [100, 900, 100, 900],
   "debug": false
 }

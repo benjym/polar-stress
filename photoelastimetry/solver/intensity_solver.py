@@ -34,7 +34,7 @@ def predict_intensity(
     L,
     wavelength,
     analyzer_angles,
-    polarizer_angle=0.0,
+    S_i_hat,
     I0=1.0,
 ):
     """
@@ -58,8 +58,8 @@ def predict_intensity(
         Wavelength of light (m).
     analyzer_angles : array-like
         Analyzer angles in radians [0, π/4, π/2, 3π/4].
-    polarizer_angle : float, optional
-        Polarizer angle in radians (default: 0.0).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     I0 : float, optional
         Incident intensity (default: 1.0).
 
@@ -82,11 +82,10 @@ def predict_intensity(
     # Get sample Mueller matrix
     M = mueller_matrix(theta, delta)
 
-    # Incident Stokes vector (linear polarization at polarizer_angle)
+    # Incident Stokes vector from S_i_hat
     # S_in = I0 * [1, cos(2*pol_angle), sin(2*pol_angle), 0]
-    cos_2p = np.cos(2 * polarizer_angle)
-    sin_2p = np.sin(2 * polarizer_angle)
-    S_in = I0 * np.array([1.0, cos_2p, sin_2p, 0.0])
+    S_i_hat = np.asarray(S_i_hat)
+    S_in = I0 * np.array([1.0, S_i_hat[0], S_i_hat[1], S_i_hat[2]])
 
     # Transmitted Stokes vector
     S_out = M @ S_in
@@ -111,7 +110,7 @@ def compute_intensity_residual(
     nu,
     L,
     analyzer_angles,
-    polarizer_angle=0.0,
+    S_i_hat,
     I0=1.0,
     weights=None,
 ):
@@ -135,8 +134,8 @@ def compute_intensity_residual(
         Sample thickness (m).
     analyzer_angles : array-like
         Analyzer angles in radians [0, π/4, π/2, 3π/4].
-    polarizer_angle : float, optional
-        Polarizer angle in radians (default: 0.0).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     I0 : float, optional
         Incident intensity (default: 1.0).
     weights : ndarray, optional
@@ -162,7 +161,7 @@ def compute_intensity_residual(
             L,
             wavelength,
             analyzer_angles,
-            polarizer_angle,
+            S_i_hat,
             I0,
         )
 
@@ -183,8 +182,8 @@ def recover_stress_tensor_intensity(
     C_values,
     nu,
     L,
+    S_i_hat,
     analyzer_angles=None,
-    polarizer_angle=0.0,
     I0=1.0,
     weights=None,
     initial_guess=None,
@@ -213,8 +212,8 @@ def recover_stress_tensor_intensity(
         Sample thickness (m).
     analyzer_angles : array-like, optional
         Analyzer angles in radians. Default: [0, π/4, π/2, 3π/4].
-    polarizer_angle : float, optional
-        Polarizer angle in radians (default: 0.0).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     I0 : float, optional
         Incident intensity for normalization (default: 1.0).
     weights : ndarray, optional
@@ -276,7 +275,6 @@ def recover_stress_tensor_intensity(
         )
 
         S_m_hat = np.zeros((len(wavelengths), 2))
-        S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
 
         for c in range(len(wavelengths)):
             I_data = I_measured[c]
@@ -308,7 +306,7 @@ def recover_stress_tensor_intensity(
                     nu,
                     L,
                     analyzer_angles,
-                    polarizer_angle,
+                    S_i_hat,
                     I0,
                     weights,
                 )
@@ -335,7 +333,7 @@ def recover_stress_tensor_intensity(
                     nu,
                     L,
                     analyzer_angles,
-                    polarizer_angle,
+                    S_i_hat,
                     I0,
                     weights,
                 ),
@@ -355,7 +353,7 @@ def recover_stress_tensor_intensity(
                     nu,
                     L,
                     analyzer_angles,
-                    polarizer_angle,
+                    S_i_hat,
                     I0,
                     weights,
                 ),
@@ -377,8 +375,8 @@ def recover_stress_map(
     C_values,
     nu,
     L,
+    S_i_hat,
     analyzer_angles=None,
-    polarizer_angle=0.0,
     I0=1.0,
     use_poisson_weights=True,
     initial_guess_method="stokes",
@@ -406,8 +404,8 @@ def recover_stress_map(
         Sample thickness (m).
     analyzer_angles : array-like, optional
         Analyzer angles in radians. Default: [0, π/4, π/2, 3π/4].
-    polarizer_angle : float, optional
-        Polarizer angle in radians (default: 0.0).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     I0 : float, optional
         Reference incident intensity (default: 1.0).
     use_poisson_weights : bool, optional
@@ -457,7 +455,7 @@ def recover_stress_map(
             C_values,
             nu,
             L,
-            np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)]),
+            S_i_hat,
             n_jobs=n_jobs,
         )
 
@@ -495,8 +493,8 @@ def recover_stress_map(
             C_values,
             nu_pixel,
             L,
+            S_i_hat,
             analyzer_angles,
-            polarizer_angle,
             I0,
             weights,
             initial_guess,
@@ -531,8 +529,8 @@ def compare_stokes_vs_intensity(
     C_values,
     nu,
     L,
+    S_i_hat,
     analyzer_angles=None,
-    polarizer_angle=0.0,
     true_stress=None,
 ):
     """
@@ -555,8 +553,8 @@ def compare_stokes_vs_intensity(
         Sample thickness (m).
     analyzer_angles : array-like, optional
         Analyzer angles in radians.
-    polarizer_angle : float, optional
-        Polarizer angle in radians (default: 0.0).
+    S_i_hat : array-like
+        Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat].
     true_stress : ndarray, optional
         Ground truth stress field [H, W, 3] for validation.
 
@@ -578,11 +576,6 @@ def compare_stokes_vs_intensity(
     import time
     from photoelastimetry.solver.stokes_solver import recover_stress_map
 
-    if analyzer_angles is None:
-        analyzer_angles = np.array([0, np.pi / 4, np.pi / 2, 3 * np.pi / 4])
-
-    S_i_hat = np.array([np.cos(2 * polarizer_angle), np.sin(2 * polarizer_angle)])
-
     print("=== Running Stokes-based Solver ===")
     t0 = time.time()
     stress_stokes = recover_stress_map(image_stack, wavelengths, C_values, nu, L, S_i_hat, n_jobs=-1)
@@ -598,7 +591,7 @@ def compare_stokes_vs_intensity(
         nu,
         L,
         analyzer_angles,
-        polarizer_angle,
+        S_i_hat,
         use_poisson_weights=True,
         initial_guess_method="stokes",
         n_jobs=-1,

@@ -25,7 +25,7 @@ WAVELENGTHS = np.array([650e-9, 550e-9, 450e-9])  # R, G, B in meters
 C_VALUES = np.array([2e-12, 2.2e-12, 2.5e-12])  # Different C for each wavelength
 NU = 1.0  # Solid fraction
 L = 0.01  # Sample thickness (m)
-S_I_HAT = np.array([0.1, 0.2])  # Incoming polarization
+S_I_HAT = np.array([0.1, 0.2, 0.0])  # Incoming polarization [S1_hat, S2_hat, S3_hat]
 
 
 def print_separator(title):
