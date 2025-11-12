@@ -77,7 +77,7 @@ jobs:
         
     - name: Run basic tests
       run: |
-        pytest tests/test_stokes_solver_pytest.py -v -p no:cov
+        pytest tests/test_stokes_solver_pytest.py -v --override-ini='addopts='
         
   docs-test:
     # Test documentation build
