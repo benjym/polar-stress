@@ -754,7 +754,7 @@ def compare_local_vs_global(
 
     # Data residuals
     local_residual = compute_global_residual(
-        stress_stokes_solver.flatten(),
+        stress_local.flatten(),
         image_stack,
         wavelengths,
         C_values,

@@ -1,6 +1,6 @@
 [project]
 name = "photoelastimetry"
-version = "0.4"
+version = "0.41"
 requires-python = ">=3.9"
 authors = [
   {name = "Benjy Marks", email = "benjy.marks@sydney.edu.au"},
@@ -36,9 +36,6 @@ docs = [
     "mkdocs-material", 
     "markdown-include",
     "mkdocs-include-markdown-plugin",
-]
-all = [
-    "photoelastimetry[dev,docs]",
 ]
 
 [project.scripts]
