@@ -12,20 +12,16 @@ The script investigates the photoelastic stress recovery method using
 intensity-based inversion on raw polarization measurements.
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 import pickle
 from pathlib import Path
-from photoelastimetry.solver import (
-    recover_stress_tensor_intensity,
-    predict_intensity,
-)
-from photoelastimetry.image import (
-    compute_retardance,
-    compute_principal_angle,
-)
-from plot_config import configure_plots, COLORS, CHANNEL_NAMES
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.gridspec import GridSpec
+from plot_config import CHANNEL_NAMES, COLORS, configure_plots
+
+from photoelastimetry.image import compute_principal_angle, compute_retardance
+from photoelastimetry.solver import predict_intensity, recover_stress_tensor_intensity
 
 # Set up matplotlib for publication-quality figures
 configure_plots()

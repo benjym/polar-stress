@@ -9,11 +9,8 @@ tensor at each pixel from polarimetric images.
 import numpy as np
 from scipy.optimize import minimize
 from tqdm import tqdm
-from photoelastimetry.image import (
-    compute_retardance,
-    compute_principal_angle,
-    mueller_matrix,
-)
+
+from photoelastimetry.image import compute_principal_angle, compute_retardance, mueller_matrix
 
 
 def compute_stokes_components(I_0, I_45, I_90, I_135):

@@ -1,10 +1,11 @@
 import json5
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import SymLogNorm, LogNorm
+import numpy as np
+from matplotlib.colors import LogNorm, SymLogNorm
 from tqdm import tqdm
-from photoelastimetry.plotting import virino
+
 import photoelastimetry.solver.stokes_solver as local
+from photoelastimetry.plotting import virino
 
 virino_cmap = virino()
 
@@ -467,6 +468,7 @@ def post_process_synthetic_data(
 
 if __name__ == "__main__":
     import os
+
     import photoelastimetry.io
 
     # Load the colormap

@@ -93,7 +93,7 @@ Example docstring format:
 def compute_stress(I, C, t, wavelength):
     """
     Compute stress from intensity measurements.
-    
+
     Parameters
     ----------
     I : ndarray
@@ -104,13 +104,13 @@ def compute_stress(I, C, t, wavelength):
         Sample thickness in meters
     wavelength : float
         Light wavelength in meters
-        
+
     Returns
     -------
     stress : ndarray
         Stress tensor with shape (H, W, 3) containing
         [sigma_xx, sigma_yy, sigma_xy]
-        
+
     Examples
     --------
     >>> I = np.random.rand(100, 100, 4)

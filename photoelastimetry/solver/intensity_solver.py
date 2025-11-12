@@ -16,13 +16,10 @@ from the stress tensor via Mueller/Jones calculus.
 """
 
 import numpy as np
-from scipy.optimize import minimize, least_squares
+from scipy.optimize import least_squares, minimize
 from tqdm import tqdm
-from photoelastimetry.image import (
-    compute_retardance,
-    compute_principal_angle,
-    mueller_matrix,
-)
+
+from photoelastimetry.image import compute_principal_angle, compute_retardance, mueller_matrix
 
 
 def predict_intensity(
@@ -269,8 +266,8 @@ def recover_stress_tensor_intensity(
     if initial_guess is None:
         # Quick estimate: compute Stokes and use closed-form estimate
         from photoelastimetry.solver.stokes_solver import (
-            compute_stokes_components,
             compute_normalized_stokes,
+            compute_stokes_components,
             recover_stress_tensor,
         )
 
@@ -574,6 +571,7 @@ def compare_stokes_vs_intensity(
         - 'runtime_intensity': Execution time for intensity
     """
     import time
+
     from photoelastimetry.solver.stokes_solver import recover_stress_map
 
     print("=== Running Stokes-based Solver ===")

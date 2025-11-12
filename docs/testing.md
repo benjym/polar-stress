@@ -200,7 +200,7 @@ Tests run automatically on GitHub Actions for:
 
 - **Python versions**: 3.9, 3.10, 3.11, 3.12
 - **On events**: Push to main/develop, pull requests
-- **Checks**: 
+- **Checks**:
   - All tests pass
   - Code formatting (black)
   - Linting (flake8)
@@ -230,18 +230,18 @@ def sample_data():
 
 class TestNewFeature:
     """Tests for new feature X."""
-    
+
     def test_basic_functionality(self, sample_data):
         """Test normal operation."""
         result = new_function(**sample_data)
         assert result > 0
         assert np.isfinite(result)
-    
+
     def test_edge_case_zero(self):
         """Test with zero input."""
         result = new_function(x=0, y=0)
         assert result == 0
-    
+
     def test_invalid_input(self):
         """Test error handling."""
         with pytest.raises(ValueError):

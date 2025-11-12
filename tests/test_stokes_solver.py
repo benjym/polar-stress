@@ -6,18 +6,19 @@ This test suite verifies that the multi-wavelength approach can recover
 the full stress tensor, not just the principal stress difference.
 """
 
-import numpy as np
 import sys
-from photoelastimetry.solver.stokes_solver import (
-    compute_stokes_components,
+
+import numpy as np
+
+from photoelastimetry.solver.stokes_solver import (  # compute_residual,
     compute_normalized_stokes,
-    compute_retardance,
     compute_principal_angle,
+    compute_retardance,
+    compute_solid_fraction,
+    compute_stokes_components,
     mueller_matrix,
     predict_stokes,
     recover_stress_tensor,
-    # compute_residual,
-    compute_solid_fraction,
 )
 
 # Test parameters

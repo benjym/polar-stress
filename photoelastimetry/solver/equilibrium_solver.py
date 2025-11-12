@@ -21,9 +21,12 @@ These automatically satisfy equilibrium: ∂σ_xx/∂x + ∂σ_xy/∂y = 0 and
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy.sparse import diags, kron, eye as speye
+from scipy.sparse import diags
+from scipy.sparse import eye as speye
+from scipy.sparse import kron
 from scipy.sparse.linalg import spsolve
 from tqdm import tqdm
+
 from photoelastimetry.solver import stokes_solver
 
 
@@ -56,7 +59,9 @@ def build_finite_difference_operators(nx, ny, dx=1.0, dy=1.0):
     L : scipy.sparse matrix
         Laplacian operator (∇²).
     """
-    from scipy.sparse import diags, kron, eye as speye
+    from scipy.sparse import diags
+    from scipy.sparse import eye as speye
+    from scipy.sparse import kron
 
     # 1D second derivative operator (central differences)
     # [1, -2, 1] / dx^2

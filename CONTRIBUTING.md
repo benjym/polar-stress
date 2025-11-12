@@ -88,13 +88,13 @@ def sample_data():
 
 class TestFeature:
     """Test class for a specific feature."""
-    
+
     def test_basic_functionality(self, sample_data):
         """Test basic use case."""
         result = function_to_test(**sample_data)
         assert result is not None
         assert np.isfinite(result)
-    
+
     def test_edge_case(self):
         """Test edge case or error handling."""
         with pytest.raises(ValueError):
@@ -174,19 +174,19 @@ When adding new features:
    def my_function(param1, param2):
        """
        Brief description of the function.
-       
+
        Parameters
        ----------
        param1 : type
            Description of param1.
        param2 : type
            Description of param2.
-           
+
        Returns
        -------
        return_type
            Description of return value.
-           
+
        Examples
        --------
        >>> result = my_function(1, 2)

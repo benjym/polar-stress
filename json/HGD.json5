@@ -5,7 +5,7 @@
     t : 0.005,  // Thickness in meters
     C : 1e-7,  // Stress-optic coefficient (Pa^-1)
     lambda_light : 550e-9,  // Wavelength of light in meters
-    scattering : 0, // 
+    scattering : 0, //
     p_filename : "/Users/bmar5496/code/HGD/papers/HGD/json/silo_stress.json5",
     s_filename : "/Users/bmar5496/code/HGD/output/silo_stress/data/s_004800.npy"
 }

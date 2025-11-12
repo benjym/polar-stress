@@ -1,7 +1,7 @@
 {
     // Incoming normalized Stokes vector [S1_hat, S2_hat, S3_hat]
     // For linear polarizer at 0°: [1.0, 0.0, 0.0]
-    // For linear polarizer at 45°: [0.0, 1.0, 0.0]  
+    // For linear polarizer at 45°: [0.0, 1.0, 0.0]
     // For circular polarizer: [0.0, 0.0, 1.0]
     S_i_hat : [1.0, 0.0, 0.0], // Incoming polarization state
     wavelengths : [650, 550, 450], // R, G, B wavelengths (nm)

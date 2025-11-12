@@ -8,16 +8,17 @@ for photoelastic analysis with proper pytest structure and fixtures.
 
 import numpy as np
 import pytest
+
 from photoelastimetry.solver.stokes_solver import (
-    compute_stokes_components,
     compute_normalized_stokes,
-    compute_retardance,
     compute_principal_angle,
+    compute_retardance,
+    compute_solid_fraction,
+    compute_stokes_components,
     mueller_matrix,
     predict_stokes,
-    recover_stress_tensor,
-    compute_solid_fraction,
     recover_stress_map_stokes,
+    recover_stress_tensor,
 )
 
 
@@ -257,7 +258,6 @@ class TestStressRecovery:
         # For uniaxial stress, check that the principal stress difference has reasonable magnitude
         # Note: Photoelasticity recovers stress differences, not absolute values
         # The recovered stress tensor may be in a different reference frame
-        psd_true = abs(sigma_xx_true - sigma_yy_true)
         psd_recovered = np.sqrt(
             (stress_recovered[0] - stress_recovered[1]) ** 2 + 4 * stress_recovered[2] ** 2
         )

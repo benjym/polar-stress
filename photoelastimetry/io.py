@@ -1,8 +1,10 @@
-import os
-import numpy as np
 import json
-from tqdm import tqdm
+import os
 from glob import glob
+
+import numpy as np
+from tqdm import tqdm
+
 import photoelastimetry.image as image
 
 
