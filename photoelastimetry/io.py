@@ -148,6 +148,10 @@ def save_image(filename, data, metadata={}):
     >>> metadata = {"dtype": "uint8"}
     >>> save_image("output.png", data, metadata)
     """
+    output_folder = os.path.dirname(filename)
+    if output_folder != "" and not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
     if filename.endswith(".npy"):
         np.save(filename, data)
     elif filename.endswith(".raw"):

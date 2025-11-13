@@ -332,3 +332,406 @@ def show_all_channels(data, metadata, filename=None):
         plt.savefig(filename)
     else:
         plt.show()
+
+
+def plot_optimization_history(history, S_m_hat, filename=None):
+    """
+    Plot the evolution of stress components and Stokes parameters during optimization.
+
+    Parameters
+    ----------
+    history : dict
+        Dictionary containing optimization history with keys:
+        - 'all_paths': list of dicts, each containing optimization path data
+        - 'best_path_index': index of the path that led to the best solution
+    S_m_hat : ndarray
+        Measured normalized Stokes components, shape (3, 2) for RGB channels.
+        Used to show target values.
+    filename : str, optional
+        If provided, save figure to this filename instead of displaying.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object.
+    """
+    all_paths = history["all_paths"]
+    best_path_index = history["best_path_index"]
+
+    colors_rgb = ["red", "green", "blue"]
+
+    fig = plt.figure(figsize=(16, 10))
+    gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
+
+    # Plot 1: Stress components evolution (all paths)
+    ax1 = fig.add_subplot(gs[0, :])
+    for i, path in enumerate(all_paths):
+        stress_params = path["stress_params"]
+        n_iter = len(stress_params)
+        iterations = np.arange(n_iter)
+        is_best = path["is_best"]
+        alpha = 0.8 if is_best else 0.1
+        linewidth = 2 if is_best else 0.1
+        linestyle = "-" if is_best else "-"
+        markersize = 2 if is_best else 0.1
+
+        ax1.plot(
+            iterations,
+            stress_params[:, 0],
+            "o-",
+            alpha=alpha,
+            markersize=markersize,
+            linewidth=linewidth,
+            color="C0",
+        )
+        ax1.plot(
+            iterations,
+            stress_params[:, 1],
+            "s-",
+            alpha=alpha,
+            markersize=markersize,
+            linewidth=linewidth,
+            color="C1",
+        )
+        ax1.plot(
+            iterations,
+            stress_params[:, 2],
+            "^-",
+            alpha=alpha,
+            markersize=markersize,
+            linewidth=linewidth,
+            color="C2",
+        )
+
+    # Add legend (using best path)
+    best_path = all_paths[best_path_index]
+    ax1.plot([], [], "o-", color="C0", label="σ_xx", linewidth=2)
+    ax1.plot([], [], "s-", color="C1", label="σ_yy", linewidth=2)
+    ax1.plot([], [], "^-", color="C2", label="σ_xy", linewidth=2)
+    ax1.set_xlabel("Iteration (within each path)")
+    ax1.set_ylabel("Stress (Pa)")
+    ax1.set_title(
+        f"Evolution of Stress Components ({len(all_paths)} optimization paths, best path highlighted)"
+    )
+    ax1.legend()
+    # ax1.grid(True, alpha=0.3)
+
+    # Plot 2: Residual evolution (all paths)
+    ax2 = fig.add_subplot(gs[1, 0])
+    for i, path in enumerate(all_paths):
+        residuals = path["residuals"]
+        n_iter = len(residuals)
+        iterations = np.arange(n_iter)
+        is_best = path["is_best"]
+        alpha = 0.8 if is_best else 0.2
+        linewidth = 2 if is_best else 0.5
+
+        ax2.semilogy(
+            iterations, residuals, "o-", alpha=alpha, markersize=2 if is_best else 1, linewidth=linewidth
+        )
+    ax2.set_xlabel("Iteration (within each path)")
+    ax2.set_ylabel("Residual (log scale)")
+    ax2.set_title("Residual Evolution (All Paths)")
+    ax2.grid(True, alpha=0.3)
+
+    # Plot 3: S1_hat evolution for RGB channels (best path only)
+    ax3 = fig.add_subplot(gs[1, 1])
+    S_predicted = best_path["S_predicted"]
+    n_iter = len(S_predicted)
+    iterations = np.arange(n_iter)
+    for c, color in enumerate(colors_rgb):
+        ax3.plot(
+            iterations,
+            S_predicted[:, c, 0],
+            "o-",
+            color=color,
+            alpha=0.7,
+            markersize=2,
+            label=f"{color.upper()} predicted",
+        )
+        ax3.axhline(
+            S_m_hat[c, 0],
+            color=color,
+            linestyle="--",
+            linewidth=2,
+            alpha=0.8,
+            label=f"{color.upper()} measured",
+        )
+    ax3.set_xlabel("Iteration")
+    ax3.set_ylabel("S1_hat (normalized)")
+    ax3.set_title("S1_hat Evolution - Best Path (RGB Channels)")
+    ax3.legend(fontsize=8, ncol=2)
+    ax3.grid(True, alpha=0.3)
+
+    # Plot 4: S2_hat evolution for RGB channels (best path only)
+    ax4 = fig.add_subplot(gs[1, 2])
+    for c, color in enumerate(colors_rgb):
+        ax4.plot(
+            iterations,
+            S_predicted[:, c, 1],
+            "s-",
+            color=color,
+            alpha=0.7,
+            markersize=2,
+            label=f"{color.upper()} predicted",
+        )
+        ax4.axhline(
+            S_m_hat[c, 1],
+            color=color,
+            linestyle="--",
+            linewidth=2,
+            alpha=0.8,
+            label=f"{color.upper()} measured",
+        )
+    ax4.set_xlabel("Iteration")
+    ax4.set_ylabel("S2_hat (normalized)")
+    ax4.set_title("S2_hat Evolution - Best Path (RGB Channels)")
+    ax4.legend(fontsize=8, ncol=2)
+    ax4.grid(True, alpha=0.3)
+
+    # Plot 5: 3D trajectory in stress space (all paths)
+    ax5 = fig.add_subplot(gs[2, 0], projection="3d")
+    for i, path in enumerate(all_paths):
+        stress_params = path["stress_params"]
+        n_iter = len(stress_params)
+        iterations_path = np.arange(n_iter)
+        is_best = path["is_best"]
+        alpha = 0.7 if is_best else 0.15
+        linewidth = 2 if is_best else 0.5
+        s = 20 if is_best else 5
+
+        scatter = ax5.scatter(
+            stress_params[:, 0],
+            stress_params[:, 1],
+            stress_params[:, 2],
+            c=iterations_path,
+            cmap="viridis",
+            s=s,
+            alpha=alpha,
+        )
+        ax5.plot(
+            stress_params[:, 0],
+            stress_params[:, 1],
+            stress_params[:, 2],
+            "k-",
+            alpha=alpha,
+            linewidth=linewidth,
+        )
+
+        # Mark start and end points for best path only
+        if is_best:
+            ax5.scatter(
+                stress_params[0, 0],
+                stress_params[0, 1],
+                stress_params[0, 2],
+                color="green",
+                s=100,
+                marker="o",
+                label="Start (best)",
+                edgecolors="black",
+            )
+            ax5.scatter(
+                stress_params[-1, 0],
+                stress_params[-1, 1],
+                stress_params[-1, 2],
+                color="red",
+                s=100,
+                marker="*",
+                label="End (best)",
+                edgecolors="black",
+            )
+
+    ax5.set_xlabel("σ_xx (Pa)")
+    ax5.set_ylabel("σ_yy (Pa)")
+    ax5.set_zlabel("σ_xy (Pa)")
+    ax5.set_title(f"Optimization Trajectories in Stress Space ({len(all_paths)} paths)")
+    # ax5.legend()
+    plt.colorbar(scatter, ax=ax5, label="Iteration", shrink=0.6)
+
+    # Plot 6: Final comparison of measured vs predicted (best path)
+    ax6 = fig.add_subplot(gs[2, 1:])
+    x_pos = np.arange(6)
+    measured = np.concatenate([S_m_hat[:, 0], S_m_hat[:, 1]])
+    S_predicted_best = best_path["S_predicted"]
+    predicted = np.concatenate([S_predicted_best[-1, :, 0], S_predicted_best[-1, :, 1]])
+
+    width = 0.35
+    ax6.bar(x_pos - width / 2, measured, width, label="Measured", alpha=0.7, color="steelblue")
+    ax6.bar(x_pos + width / 2, predicted, width, label="Predicted (final)", alpha=0.7, color="coral")
+    ax6.set_xlabel("Stokes Component")
+    ax6.set_ylabel("Normalized Value")
+    ax6.set_title("Final Comparison: Measured vs Predicted Stokes Components (Best Path)")
+    ax6.set_xticks(x_pos)
+    ax6.set_xticklabels(["R S1", "G S1", "B S1", "R S2", "G S2", "B S2"])
+    ax6.legend()
+    ax6.grid(True, alpha=0.3, axis="y")
+
+    # Add summary text
+    final_residual = best_path["residuals"][-1]
+    final_stress = best_path["stress_params"][-1]
+    fig.text(
+        0.02,
+        0.98,
+        f"Final residual: {final_residual:.2e}\n"
+        f"Final σ_xx: {final_stress[0]:.2e} Pa\n"
+        f"Final σ_yy: {final_stress[1]:.2e} Pa\n"
+        f"Final σ_xy: {final_stress[2]:.2e} Pa\n"
+        f"Iterations: {n_iter}",
+        verticalalignment="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+    )
+
+    if filename:
+        plt.savefig(filename, dpi=150, bbox_inches="tight")
+        plt.close()
+    else:
+        plt.tight_layout()
+
+    return fig
+
+
+def plot_optimization_history_live(history, S_m_hat, fig=None, axes=None):
+    """
+    Create or update a live plot of optimization history (for interactive use).
+
+    Parameters
+    ----------
+    history : dict
+        Dictionary containing optimization history (same format as plot_optimization_history).
+    S_m_hat : ndarray
+        Measured normalized Stokes components, shape (3, 2).
+    fig : matplotlib.figure.Figure, optional
+        Existing figure to update. If None, creates new figure.
+    axes : list, optional
+        List of existing axes to update. If None, creates new axes.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object.
+    axes : list
+        List of axes objects.
+    """
+    stress_params = history["stress_params"]
+    S_predicted = history["S_predicted"]
+    residuals = history["residuals"]
+    n_iter = len(residuals)
+    iterations = np.arange(n_iter)
+
+    colors_rgb = ["red", "green", "blue"]
+
+    # Create figure if needed
+    if fig is None:
+        fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+        fig.suptitle("Live Optimization Progress", fontsize=14, fontweight="bold")
+        plt.ion()  # Enable interactive mode
+    else:
+        # Clear existing axes
+        for ax in axes.flat:
+            ax.clear()
+
+    axes = axes.flatten()
+
+    # Plot 1: Stress components
+    axes[0].plot(iterations, stress_params[:, 0], "o-", label="σ_xx", alpha=0.7, markersize=3)
+    axes[0].plot(iterations, stress_params[:, 1], "s-", label="σ_yy", alpha=0.7, markersize=3)
+    axes[0].plot(iterations, stress_params[:, 2], "^-", label="σ_xy", alpha=0.7, markersize=3)
+    axes[0].set_xlabel("Iteration")
+    axes[0].set_ylabel("Stress (Pa)")
+    axes[0].set_title("Stress Components")
+    axes[0].legend(fontsize=8)
+    axes[0].grid(True, alpha=0.3)
+
+    # Plot 2: Residual
+    axes[1].semilogy(iterations, residuals, "ko-", markersize=3)
+    axes[1].set_xlabel("Iteration")
+    axes[1].set_ylabel("Residual (log)")
+    axes[1].set_title("Residual Evolution")
+    axes[1].grid(True, alpha=0.3)
+
+    # Plot 3: S1_hat for RGB
+    for c, color in enumerate(colors_rgb):
+        axes[2].plot(
+            iterations,
+            S_predicted[:, c, 0],
+            "o-",
+            color=color,
+            alpha=0.7,
+            markersize=2,
+            label=f"{color[0].upper()} pred",
+        )
+        axes[2].axhline(S_m_hat[c, 0], color=color, linestyle="--", linewidth=2, alpha=0.5)
+    axes[2].set_xlabel("Iteration")
+    axes[2].set_ylabel("S1_hat")
+    axes[2].set_title("S1_hat (RGB)")
+    axes[2].legend(fontsize=7)
+    axes[2].grid(True, alpha=0.3)
+
+    # Plot 4: S2_hat for RGB
+    for c, color in enumerate(colors_rgb):
+        axes[3].plot(
+            iterations,
+            S_predicted[:, c, 1],
+            "s-",
+            color=color,
+            alpha=0.7,
+            markersize=2,
+            label=f"{color[0].upper()} pred",
+        )
+        axes[3].axhline(S_m_hat[c, 1], color=color, linestyle="--", linewidth=2, alpha=0.5)
+    axes[3].set_xlabel("Iteration")
+    axes[3].set_ylabel("S2_hat")
+    axes[3].set_title("S2_hat (RGB)")
+    axes[3].legend(fontsize=7)
+    axes[3].grid(True, alpha=0.3)
+
+    # Plot 5: Trajectory projection (sigma_xx vs sigma_yy)
+    axes[4].plot(stress_params[:, 0], stress_params[:, 1], "o-", markersize=3, alpha=0.7, color="navy")
+    axes[4].scatter(
+        stress_params[0, 0],
+        stress_params[0, 1],
+        color="green",
+        s=100,
+        marker="o",
+        label="Start",
+        edgecolors="black",
+        zorder=5,
+    )
+    axes[4].scatter(
+        stress_params[-1, 0],
+        stress_params[-1, 1],
+        color="red",
+        s=100,
+        marker="*",
+        label="End",
+        edgecolors="black",
+        zorder=5,
+    )
+    axes[4].set_xlabel("σ_xx (Pa)")
+    axes[4].set_ylabel("σ_yy (Pa)")
+    axes[4].set_title("Stress Trajectory (xy plane)")
+    axes[4].legend(fontsize=8)
+    axes[4].grid(True, alpha=0.3)
+
+    # Plot 6: Final comparison
+    x_pos = np.arange(6)
+    measured = np.concatenate([S_m_hat[:, 0], S_m_hat[:, 1]])
+    predicted = np.concatenate([S_predicted[-1, :, 0], S_predicted[-1, :, 1]])
+
+    width = 0.35
+    axes[5].bar(x_pos - width / 2, measured, width, label="Measured", alpha=0.7, color="steelblue")
+    axes[5].bar(x_pos + width / 2, predicted, width, label="Predicted", alpha=0.7, color="coral")
+    axes[5].set_xlabel("Component")
+    axes[5].set_ylabel("Value")
+    axes[5].set_title("Measured vs Predicted")
+    axes[5].set_xticks(x_pos)
+    axes[5].set_xticklabels(["RS1", "GS1", "BS1", "RS2", "GS2", "BS2"], fontsize=8)
+    axes[5].legend(fontsize=8)
+    axes[5].grid(True, alpha=0.3, axis="y")
+
+    fig.tight_layout()
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+
+    return fig, axes.reshape(2, 3)

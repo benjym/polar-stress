@@ -311,7 +311,7 @@ def recover_stress_tensor_intensity(
             ),
             initial_guess,
             method="Nelder-Mead",
-            options={"xatol": 1e-6, "fatol": 1e-8, "maxiter": 2000},
+            options={"xatol": 1e-16, "fatol": 1e-16, "maxiter": 2000},
         )
         stress_tensor = result.x
         success = result.success
@@ -366,7 +366,7 @@ def recover_stress_tensor_intensity(
     return stress_tensor, success, result
 
 
-def recover_stress_map(
+def recover_stress_map_intensity(
     image_stack,
     wavelengths,
     C_values,
@@ -376,8 +376,8 @@ def recover_stress_map(
     analyzer_angles=None,
     I0=1.0,
     use_poisson_weights=True,
-    initial_guess_method="stokes",
-    method="lm",
+    initial_guess_method="uniform",
+    method="nelder-mead",
     n_jobs=-1,
 ):
     """
@@ -444,9 +444,9 @@ def recover_stress_map(
     initial_guess_map = None
     if initial_guess_method == "stokes":
         print("Computing initial guess using Stokes-based solver...")
-        from photoelastimetry.solver.stokes_solver import recover_stress_map
+        from photoelastimetry.solver.stokes_solver import recover_stress_map_stokes
 
-        initial_guess_map = recover_stress_map(
+        initial_guess_map = recover_stress_map_stokes(
             image_stack,
             wavelengths,
             C_values,
@@ -572,17 +572,17 @@ def compare_stokes_vs_intensity(
     """
     import time
 
-    from photoelastimetry.solver.stokes_solver import recover_stress_map
+    from photoelastimetry.solver.stokes_solver import recover_stress_map_stokes
 
     print("=== Running Stokes-based Solver ===")
     t0 = time.time()
-    stress_stokes = recover_stress_map(image_stack, wavelengths, C_values, nu, L, S_i_hat, n_jobs=-1)
+    stress_stokes = recover_stress_map_stokes(image_stack, wavelengths, C_values, nu, L, S_i_hat, n_jobs=-1)
     t_stokes = time.time() - t0
     print(f"Completed in {t_stokes:.2f} seconds")
 
     print("\n=== Running Intensity-based Solver ===")
     t0 = time.time()
-    stress_intensity, success_map = recover_stress_map(
+    stress_intensity, success_map = recover_stress_map_intensity(
         image_stack,
         wavelengths,
         C_values,

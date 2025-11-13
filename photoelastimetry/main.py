@@ -7,6 +7,8 @@ from scipy.ndimage import gaussian_filter
 
 import photoelastimetry.io
 import photoelastimetry.plotting
+import photoelastimetry.solver.equilibrium_solver
+import photoelastimetry.solver.intensity_solver
 import photoelastimetry.solver.stokes_solver
 
 
@@ -49,11 +51,13 @@ def image_to_stress(params, output_filename=None):
 
     if params.get("crop") is not None:
         data = data[
-            params["crop"][0] : params["crop"][1],
             params["crop"][2] : params["crop"][3],
+            params["crop"][0] : params["crop"][1],
             :,
             :,
         ]
+        if params["debug"]:
+            photoelastimetry.io.save_image("debug_cropped_image.tiff", data, metadata)
 
     if params["debug"]:
         import matplotlib.pyplot as plt
@@ -72,9 +76,8 @@ def image_to_stress(params, output_filename=None):
 
     C = params["C"]  # Stress-optic coefficients in 1/Pa
     L = params["thickness"]  # Thickness in m
-    wavelengths_nm = np.array(params["wavelengths"])  # Wavelengths in nm
+    WAVELENGTHS = np.array(params["wavelengths"]) * 1e-9  # Wavelengths in m
     NU = 1.0  # Solid sample
-    WAVELENGTHS = wavelengths_nm * 1e-9  # Convert to meters
     if isinstance(C, list) or isinstance(C, np.ndarray):
         C_VALUES = C
     else:
@@ -92,15 +95,38 @@ def image_to_stress(params, output_filename=None):
 
     # Calculate stress map from image
     n_jobs = params.get("n_jobs", -1)  # Default to using all cores
-    stress_map = photoelastimetry.solver.stokes_solver.recover_stress_map_stokes(
-        data,
-        WAVELENGTHS,
-        C_VALUES,
-        NU,
-        L,
-        S_I_HAT,
-        n_jobs=n_jobs,
-    )
+    if params.get("solver") == "stokes":
+        stress_map = photoelastimetry.solver.stokes_solver.recover_stress_map_stokes(
+            data,
+            WAVELENGTHS,
+            C_VALUES,
+            NU,
+            L,
+            S_I_HAT,
+            n_jobs=n_jobs,
+        )
+    elif params.get("solver") == "intensity":
+        stress_map, success_map = photoelastimetry.solver.intensity_solver.recover_stress_map_intensity(
+            data,
+            WAVELENGTHS,
+            C_VALUES,
+            NU,
+            L,
+            S_I_HAT,
+            n_jobs=n_jobs,
+        )
+    elif params.get("solver") == "equilibrium":
+        stress_map = photoelastimetry.solver.equilibrium_solver.recover_stress_field_global_iterative(
+            data,
+            WAVELENGTHS,
+            C_VALUES,
+            NU,
+            L,
+            S_I_HAT,
+            n_jobs=n_jobs,
+        )
+    else:
+        raise ValueError("Solver type not recognized. Use 'stokes', 'intensity', or 'equilibrium'.")
 
     if params.get("output_filename") is not None:
         output_filename = params["output_filename"]
